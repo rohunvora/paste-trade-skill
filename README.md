@@ -87,4 +87,3 @@ npx skills add rohunvora/paste-trade-skill@latest -a codex
 - [Release notes skeleton](docs/releases/v1.0.0-notes-template.md)
 - [Security](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
-- [Migration report](MIGRATION_REPORT.md)

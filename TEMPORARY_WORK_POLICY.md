@@ -50,5 +50,4 @@ To promote temporary work into permanent docs/code:
 
 ## Related Files
 
-- [`MAINTENANCE.md`](./MAINTENANCE.md)
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md)

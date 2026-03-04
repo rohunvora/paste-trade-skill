@@ -1,6 +1,5 @@
 # Contributing
 
-For maintainer guardrails and release consistency checks, see [`MAINTENANCE.md`](./MAINTENANCE.md).
 For strict temporary planning/scratch handling, see [`TEMPORARY_WORK_POLICY.md`](./TEMPORARY_WORK_POLICY.md).
 
 ## Goal
@@ -29,6 +28,27 @@ Keep this repository limited to public install-critical assets for `/trade`.
 - [ ] no legacy pre-migration naming in user-facing docs
 - [ ] no secrets/private URLs in committed files
 - [ ] `CHANGELOG.md` updated for every user-visible or runtime-behavior change (under `Unreleased` until release)
+
+## Runtime Non-Negotiables
+
+1. Keep command name `/trade` unchanged.
+2. Keep public naming as `paste.trade` / `paste-trade-skill`.
+3. Do not add user-facing legacy naming.
+4. Do not commit secrets.
+5. Do not make OpenClaw wrapper setup implicit.
+
+## Install and Update Consistency
+
+If install/update commands change, update all:
+- `README.md`
+- `docs/install/openclaw.md`
+- `docs/install/claude-code.md`
+- `docs/install/codex.md`
+
+If OpenClaw wrapper behavior changes, update:
+- `docs/install/openclaw.md`
+- `README.md`
+- `scripts/setup-openclaw-wrapper.sh` (if needed)
 
 ## Validation
 
