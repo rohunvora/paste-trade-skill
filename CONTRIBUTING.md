@@ -1,5 +1,7 @@
 # Contributing
 
+For maintainer guardrails and release consistency checks, see [`MAINTENANCE.md`](./MAINTENANCE.md).
+
 ## Goal
 
 Keep this repository limited to public install-critical assets for `/trade`.
