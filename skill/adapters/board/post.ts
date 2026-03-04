@@ -12,6 +12,7 @@
 
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { appendTraceEvent, hashForTrace } from "./trace-audit";
+import { existsSync } from "fs";
 
 const { runId, args } = extractRunIdArg(process.argv);
 applyRunId(runId);
@@ -72,6 +73,7 @@ const FALLBACK_REASON_TAGS = new Set([
 
 async function loadExtractionById(runIdValue: string, thesisId: string): Promise<SavedExtractionRecord | null> {
   const extractionDir = new URL("../../../data/extractions", import.meta.url).pathname;
+  if (!existsSync(extractionDir)) return null;
   const files = (await Array.fromAsync(new Bun.Glob("extraction-*.jsonl").scan(extractionDir)))
     .map((file) => `${extractionDir}/${file}`)
     .sort()
