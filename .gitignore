@@ -3,3 +3,5 @@
 node_modules/
 data/
 *.log
+.scratch/*
+!.scratch/.gitkeep

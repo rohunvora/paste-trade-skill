@@ -2,6 +2,8 @@
 
 Internal maintainer guardrails for this repository.
 
+Temporary artifact policy is defined in [`TEMPORARY_WORK_POLICY.md`](./TEMPORARY_WORK_POLICY.md).
+
 ## Mission
 
 Keep this repository a clean public skill package for `paste.trade` `/trade`:
@@ -30,6 +32,14 @@ Exclude:
 - archived references not needed for runtime
 
 If unsure, prefer excluding and document as optional.
+
+## Temporary Workspace Rule
+
+All temporary planning/scratch artifacts must live in `.scratch/` only.
+
+- `.scratch/*` is ignored by default.
+- `.scratch/.gitkeep` is the only allowed tracked file in that folder.
+- Temporary artifacts must never be committed as source-of-truth docs.
 
 ## Non-Negotiables
 
@@ -98,4 +108,3 @@ rg -n "trade-slash-wrapper|setup-openclaw-wrapper.sh" README.md docs/install/ope
 rg -n "slash-trade" README.md SKILL.md docs CHANGELOG.md CONTRIBUTING.md SECURITY.md
 rg -n "(PASTE_TRADE_KEY=|X_BEARER_TOKEN=|GEMINI_API_KEY=|stk_live_|BEGIN PRIVATE KEY)" .
 ```
-

@@ -1,6 +1,7 @@
 # Contributing
 
 For maintainer guardrails and release consistency checks, see [`MAINTENANCE.md`](./MAINTENANCE.md).
+For strict temporary planning/scratch handling, see [`TEMPORARY_WORK_POLICY.md`](./TEMPORARY_WORK_POLICY.md).
 
 ## Goal
 
@@ -18,6 +19,7 @@ Keep this repository limited to public install-critical assets for `/trade`.
 - local data or memory snapshots
 - private notes and internal planning docs
 - secrets or environment dumps
+- temporary artifacts outside `.scratch/`
 
 ## Pull request checklist
 
