@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v2 -a openclaw
+npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
 ```
 
 ## Required wrapper/plugin setup
@@ -38,7 +38,7 @@ X login is optional and should not block first run.
 ## Update
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@latest -a openclaw
+npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
 ```
 
 Then rerun wrapper setup:

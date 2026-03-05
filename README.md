@@ -15,7 +15,7 @@ Finds every tradeable thesis in a source and routes each to an executable trade.
 ### OpenClaw
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v2 -a openclaw
+npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
 ```
 
 Then install/enable the bundled wrapper plugin:
@@ -27,13 +27,13 @@ bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ### Claude Code
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v2 -a claude-code
+npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
 ```
 
 ### Codex
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@v2 -a codex
+npx skills add rohunvora/paste-trade-skill@v1 -a codex
 ```
 
 ## Prerequisites
@@ -75,21 +75,24 @@ Direct thesis (raw market observation):
 ### OpenClaw
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@latest -a openclaw
+npx skills add rohunvora/paste-trade-skill@v1 -a openclaw
 bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ```
 
 ### Claude Code
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@latest -a claude-code
+npx skills add rohunvora/paste-trade-skill@v1 -a claude-code
 ```
 
 ### Codex
 
 ```bash
-npx skills add rohunvora/paste-trade-skill@latest -a codex
+npx skills add rohunvora/paste-trade-skill@v1 -a codex
 ```
+
+During launch hardening, `@v1` is the canonical install and update channel. Move to
+`@latest` only after the public release path is verified.
 
 ## Account portability
 

@@ -1,8 +1,14 @@
 # Changelog
 
-## [2.0.0] - 2026-03-05
+Versioning note:
+- public release numbering starts at `1.x`
+- the March 5 rewrite was previously tracked internally as `2.0.0`
+- the first public install contract is `v1`
 
-Complete skill rewrite from v2-lab. Replaces v1 entirely.
+## [1.0.0] - 2026-03-05
+
+First public release contract. Renumbered from the internal prelaunch `2.0.0`
+rewrite from `v2-lab`.
 
 ### Changed
 
@@ -32,7 +38,7 @@ Complete skill rewrite from v2-lab. Replaces v1 entirely.
 - X profile scan workflows
 - Prediction-market routing adapters
 
-## [1.0.0] - 2026-03-03
+## [0.1.0] - 2026-03-03
 
 ### Added
 
