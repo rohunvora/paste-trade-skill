@@ -5,6 +5,42 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - the first public install contract is `v1`
 
+## [1.1.0] - 2026-03-08
+
+Full sync from canonical dev repo. Three days of improvements since launch.
+
+### Changed
+
+- Core loop restructured: new step 3 (Enrich) for metadata resolution, speaker identity, diarization
+- Step 5 split into sub-steps: 5a Research, 5b Narrate, 5c Price and save
+- Derivation now includes `explanation` (free-form prose) and `comparison` (candidate grid) alongside steps
+- Explanation voice guidance: lead with sharp insight, hedge with data not qualifiers
+- `route-check.ts` replaced by `route.ts` as primary routing adapter (route-check kept as alias)
+- `entry_price` renamed to `publish_price` across all schemas
+- `headline` renamed to `headline_quote` with frozen-at-extraction semantics
+- Save/post validation errors now exit 0 with `{ok: false}` (parallel-safe, no sibling-call cancellation)
+- Sequential post constraint removed — posts can run concurrently
+- `batch-save.ts` promoted to preferred save method for multi-thesis sources
+- Save --update merged into single call (who + route_evidence + derivation together)
+- Route evidence cross-reference validation documented
+- `route.ts` output envelope documented (tool/route/diagnostics wrapper)
+- Reference file pointer added to SKILL.md header
+- Events.md updated with actual event types (thesis_routing, thesis_routed, thesis_dropped, thought, trade_posted)
+
+### Added
+
+- `discover.ts` — instrument search across Hyperliquid + Polymarket via /api/skill/discover
+- `route.ts` — backend-only route adapter replacing route-check.ts
+- `runtime-paths.ts` — portable path resolution for dev/public repo parity
+- `source-excerpt.ts` — retrieve source context around thesis quotes during routing
+- `update-source.ts` — push enriched metadata to source page mid-run
+
+### Removed
+
+- Rollback Scope section (no longer in rollback mode)
+- Account and Key Behavior section (handled automatically by ensure-key.ts)
+- "Out of scope" items now all in scope (edit-mode, prediction-market routing)
+
 ## [1.0.0] - 2026-03-05
 
 First public release contract. Renumbered from the internal prelaunch `2.0.0`
