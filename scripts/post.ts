@@ -6,12 +6,13 @@
  * that break shell quoting).
  *
  * Usage:
- *   bun run skill/scripts/post.ts '<JSON payload>'
- *   echo '<JSON>' | bun run skill/scripts/post.ts
+ *   bun run scripts/post.ts '<JSON payload>'
+ *   echo '<JSON>' | bun run scripts/post.ts
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { appendTraceEvent, hashForTrace } from "./trace-audit";
+import { toFiniteNumber } from "../shared/trade-pricing";
 import { existsSync } from "fs";
 import { getRuntimeExtractionDir, getUserStateDir } from "./runtime-paths";
 
@@ -24,7 +25,7 @@ if (!payload) {
   payload = await Bun.stdin.text();
 }
 if (!payload?.trim()) {
-  console.error("Usage: bun run skill/scripts/post.ts '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run scripts/post.ts '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 payload = payload.trim();
@@ -66,14 +67,7 @@ function stripVenuePrefix(ticker: string): string {
   return idx === -1 ? ticker : ticker.slice(idx + 1);
 }
 
-function toFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
+// toFiniteNumber imported from shared/trade-pricing
 
 function applyCanonicalPublishPrice(tradeBody: Record<string, unknown>): void {
   const sourceDatePrice = toFiniteNumber(tradeBody.source_date_price);
@@ -429,6 +423,14 @@ try {
   // non-fatal
 }
 
+// Preserve prefixed HL ticker for deeplinks (e.g., "cash:HOOD") before stripping.
+// The display ticker stays bare ("HOOD"), but deeplinks need the full prefix.
+if (typeof body.ticker === "string" && body.ticker.includes(":")) {
+  body.hl_ticker = body.ticker;
+  body.ticker = stripVenuePrefix(body.ticker);
+  payload = JSON.stringify(body);
+}
+
 await validatePayloadAgainstSavedExtraction(runId, body as Record<string, unknown>);
 
 // Auto-provision API key if missing, resolve base URL
@@ -440,11 +442,39 @@ if (!apiKey) {
   process.exit(1);
 }
 
-await enrichBaselineViaAssess(body as Record<string, unknown>, baseUrl, apiKey);
+// Polymarket trades use probability prices (0-1), not stock prices.
+// Skip /api/skill/assess enrichment (Yahoo Finance) which would corrupt them.
+const platform = typeof body.platform === "string" ? body.platform : "";
+if (platform === "polymarket") {
+  // Normalize PM direction: skill LLM may output "yes"/"no" instead of "long"/"short"
+  if (body.direction === "yes") body.direction = "long";
+  if (body.direction === "no") body.direction = "short";
+  // Normalize PM instrument: must be "polymarket" for frontend display (YES/NO, cent pricing, PmBlock)
+  if (typeof body.instrument === "string" && body.instrument !== "polymarket") body.instrument = "polymarket";
+
+  // buy_price_usd IS the canonical price for PM trades
+  const buyPrice = toFiniteNumber(body.buy_price_usd);
+  if (buyPrice != null && buyPrice > 0 && buyPrice <= 1) {
+    body.source_date_price = buyPrice;
+    body.publish_price = buyPrice;
+    if (body.market_implied_prob === undefined) {
+      body.market_implied_prob = buyPrice;
+    }
+  }
+  // Warn if PM price looks like a stock price (should be 0-1 probability)
+  const pubPrice = toFiniteNumber(body.publish_price);
+  if (pubPrice != null && pubPrice > 1) {
+    console.error(`[post] PM trade has stock-scale publish_price: ${pubPrice} — expected 0-1 range`);
+  }
+} else {
+  await enrichBaselineViaAssess(body as Record<string, unknown>, baseUrl, apiKey);
+}
+
 applyCanonicalPublishPrice(body as Record<string, unknown>);
 payload = JSON.stringify(body);
 
-console.error(`[board] POST to ${baseUrl}/api/trades`);
+const { streamLog } = await import("./stream-log");
+streamLog(`Posting trade: ${(body as any).ticker} ${(body as any).direction}`);
 
 const headers: Record<string, string> = { "Content-Type": "application/json" };
 headers["Authorization"] = `Bearer ${apiKey}`;
@@ -517,7 +547,7 @@ try {
     }, { runId });
 
     if (body.source_theses && Array.isArray(body.source_theses)) {
-      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run skill/scripts/finalize-source.ts ...");
+      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run scripts/finalize-source.ts ...");
     }
   }
 } catch { /* streaming is optional */ }

@@ -92,9 +92,9 @@ The skill uses two main data shapes. Here's what each field means in plain Engli
 | `direct_checks` | "I checked if you can actually trade this ticker — here's what I found" |
 | `selected_expression` | The final pick: which ticker, on which platform, at what price |
 | `ticker` | The stock/crypto symbol (e.g., NVDA, SMR, IWM) |
-| `direction` | `long` (betting it goes up) or `short` (betting it goes down) |
-| `instrument` | `shares` (stocks on Robinhood) or `perps` (perpetual futures on Hyperliquid) |
-| `platform` | Where to execute: `robinhood` or `hyperliquid` |
+| `direction` | `long` (betting it goes up), `short` (betting it goes down), `yes` or `no` (Polymarket) |
+| `instrument` | `shares` (stocks on Robinhood), `perps` (perpetual futures on Hyperliquid), or `prediction_market` (Polymarket) |
+| `platform` | Where to execute: `robinhood`, `hyperliquid`, or `polymarket` |
 | `trade_type` | `direct` (the author basically named it) or `derived` (the AI connected the dots) |
 | `publish_price` | Price when the source was published — this is the "entry" price on the card |
 | `source_date_price` | Same as publish_price (historical name) |

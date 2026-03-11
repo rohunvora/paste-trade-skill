@@ -9,7 +9,7 @@
  *   upload and diarize all chunks in parallel, merge results.
  *
  * Usage:
- *   bun run skill/scripts/diarize.ts "https://youtube.com/watch?v=xxx"
+ *   bun run scripts/diarize.ts "https://youtube.com/watch?v=xxx"
  *
  * Requires: GEMINI_API_KEY env var, yt-dlp, ffmpeg
  * Cost: ~$0.14/hour (Flash), ~$0.26/hour (Pro)
@@ -126,7 +126,8 @@ async function downloadAudio(url: string): Promise<string> {
   const videoId = extractVideoId(url) || "audio";
   const outPath = join(tmpdir(), `diarize-${videoId}.mp3`);
 
-  console.error(`[diarize] Downloading audio via yt-dlp...`);
+  const { streamLog } = await import("./stream-log");
+  streamLog("Downloading audio...");
   const result = await $`yt-dlp --extract-audio --audio-format mp3 --audio-quality 5 -o ${outPath} ${url}`
     .quiet()
     .nothrow();
@@ -139,7 +140,8 @@ async function downloadAudio(url: string): Promise<string> {
   for (const p of possiblePaths) {
     if (await Bun.file(p).exists()) {
       const size = Bun.file(p).size;
-      console.error(`[diarize] Audio downloaded: ${(size / 1024 / 1024).toFixed(1)}MB`);
+      const { streamLog } = await import("./stream-log");
+      streamLog(`Audio downloaded: ${(size / 1024 / 1024).toFixed(1)}MB`);
       return p;
     }
   }
@@ -220,7 +222,8 @@ async function uploadToGemini(
   apiKey: string,
   label: string
 ): Promise<{ uri: string; mimeType: string }> {
-  console.error(`[diarize] Uploading ${label}...`);
+  const { streamLog } = await import("./stream-log");
+  streamLog(`Uploading ${label}...`);
 
   const fileData = await Bun.file(filePath).arrayBuffer();
   const numBytes = fileData.byteLength;
@@ -306,7 +309,8 @@ async function diarizeOneFile(
   apiKey: string,
   label: string
 ): Promise<DiarizeResult> {
-  console.error(`[diarize] Requesting diarization for ${label}...`);
+  const { streamLog } = await import("./stream-log");
+  streamLog(`Requesting diarization for ${label}...`);
 
   const response = await fetch(
     `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
@@ -344,7 +348,7 @@ async function diarizeOneFile(
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const parsed: DiarizeResult = JSON.parse(cleaned);
 
-  console.error(`[diarize] ${label} complete: ${parsed.segments.length} segments, ${parsed.speakers.length} speakers`);
+  streamLog(`${label} complete: ${parsed.segments.length} segments, ${parsed.speakers.length} speakers`);
   return parsed;
 }
 
@@ -407,23 +411,24 @@ async function processAudio(
   url: string,
   apiKey: string
 ): Promise<string> {
+  const { streamLog } = await import("./stream-log");
   const durationSec = await getAudioDuration(audioPath);
   const durationMin = (durationSec / 60).toFixed(1);
-  console.error(`[diarize] Audio duration: ${durationMin} minutes`);
+  streamLog(`Audio is ${durationMin} minutes. Uploading to Gemini...`);
 
   let finalResult: DiarizeResult;
 
   if (durationSec <= SHORT_THRESHOLD_SEC) {
-    // Short audio: single upload, single diarization
-    console.error(`[diarize] Short audio, processing as single file`);
     const uploaded = await uploadToGemini(audioPath, apiKey, "audio");
+    streamLog("Diarizing speakers. This takes 1-2 minutes...");
     finalResult = await diarizeOneFile(uploaded.uri, uploaded.mimeType, apiKey, "audio");
   } else {
     // Long audio: chunk, parallel upload, parallel diarize, merge
     const chunks = await splitAudio(audioPath, durationSec);
 
     // Parallel upload all chunks
-    console.error(`[diarize] Uploading ${chunks.length} chunks in parallel...`);
+    const { streamLog: slog } = await import("./stream-log");
+    slog(`Uploading ${chunks.length} audio chunks to Gemini...`);
     const uploadResults = await Promise.all(
       chunks.map((chunk) =>
         uploadToGemini(chunk.path, apiKey, `chunk ${chunk.index + 1}/${chunks.length}`)
@@ -431,7 +436,7 @@ async function processAudio(
     );
 
     // Parallel diarize all chunks
-    console.error(`[diarize] Diarizing ${chunks.length} chunks in parallel...`);
+    slog(`Diarizing ${chunks.length} chunks in parallel...`);
     const diarizeResults = await Promise.all(
       uploadResults.map((uploaded, i) =>
         diarizeOneFile(
@@ -444,7 +449,7 @@ async function processAudio(
     );
 
     // Merge results
-    console.error(`[diarize] Merging ${chunks.length} chunks...`);
+    slog(`Merging ${chunks.length} chunks...`);
     finalResult = mergeChunkResults(diarizeResults);
 
     // Cleanup chunk files
@@ -454,6 +459,10 @@ async function processAudio(
   }
 
   // Build output
+  const { streamLog: sl } = await import("./stream-log");
+  const speakerNames = finalResult.speakers.join(", ");
+  sl(`Diarization complete. ${finalResult.speakers.length} speakers: ${speakerNames}`);
+
   const flatTranscript = finalResult.segments
     .map((s) => `[${s.timestamp}] ${s.speaker}: ${s.text}`)
     .join("\n");
@@ -481,9 +490,13 @@ async function processAudio(
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const url = process.argv[2];
+  const { extractRunIdArg, applyRunId } = await import("./run-id");
+  const { runId, args } = extractRunIdArg(process.argv);
+  applyRunId(runId);
+
+  const url = args[0];
   if (!url) {
-    console.error("Usage: bun run skill/scripts/diarize.ts <url>");
+    console.error("Usage: bun run scripts/diarize.ts [--run-id <runId>] <url>");
     process.exit(1);
   }
 

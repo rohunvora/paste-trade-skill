@@ -10,6 +10,16 @@
 
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { ensureKey, getBaseUrl, loadKey } from "./ensure-key";
+import { toFiniteNumber, resolveNowSentinel } from "../shared/trade-pricing";
+import {
+  type CandidateRoute,
+  type RoutingMetadata,
+  EMPTY_ROUTING_METADATA,
+  extractPerpMetadata,
+  toCandidateRoutes,
+  toPerpInstrument,
+  toShareInstrument,
+} from "../adapters/route-fields";
 
 const DEFAULT_CAPITAL = 100_000;
 const REQUEST_TIMEOUT_MS = Number(process.env.ASSESS_BACKEND_TIMEOUT_MS || 45_000);
@@ -64,17 +74,23 @@ function parseArgs(argv: string[]) {
   applyRunId(runId);
 
   let outputMode: OutputMode = "summary";
+  // Separate positional args from named flags so flags can appear before positionals
+  const knownFlags = new Set(["--source-date", "--capital", "--horizon", "--thesis-id", "--subject-kind"]);
   const filteredArgs: string[] = [];
-  for (const arg of args) {
-    if (arg === "--raw") {
+  for (let j = 0; j < args.length; j++) {
+    if (args[j] === "--raw") {
       outputMode = "raw";
       continue;
     }
-    filteredArgs.push(arg);
+    if (knownFlags.has(args[j]!) && j + 1 < args.length) {
+      j++; // skip the flag and its value — parsed later from `args`
+      continue;
+    }
+    filteredArgs.push(args[j]!);
   }
 
   if (filteredArgs.length < 2) {
-    console.error("Usage: bun run skill/scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
+    console.error("Usage: bun run scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
     console.error("Options:");
     console.error("  --source-date YYYY-MM-DD   Price at source date for since-published P&L");
     console.error("  --capital NUMBER           Capital (default: 100000)");
@@ -101,13 +117,14 @@ function parseArgs(argv: string[]) {
   let subjectKind: SubjectKind = "asset";
   let thesisId: string | null = null;
 
-  for (let i = 2; i < filteredArgs.length; i++) {
-    if (filteredArgs[i] === "--source-date" && filteredArgs[i + 1]) sourceDate = filteredArgs[++i]!;
-    if (filteredArgs[i] === "--capital" && filteredArgs[i + 1]) capital = parseInt(filteredArgs[++i]!, 10);
-    if (filteredArgs[i] === "--horizon" && filteredArgs[i + 1]) horizon = filteredArgs[++i]!;
-    if (filteredArgs[i] === "--thesis-id" && filteredArgs[i + 1]) thesisId = filteredArgs[++i]!;
-    if (filteredArgs[i] === "--subject-kind" && filteredArgs[i + 1]) {
-      const parsed = filteredArgs[++i]!.toLowerCase();
+  // Parse named flags from the original args (positional args already extracted above)
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--source-date" && args[i + 1]) sourceDate = args[++i]!;
+    if (args[i] === "--capital" && args[i + 1]) capital = parseInt(args[++i]!, 10);
+    if (args[i] === "--horizon" && args[i + 1]) horizon = args[++i]!;
+    if (args[i] === "--thesis-id" && args[i + 1]) thesisId = args[++i]!;
+    if (args[i] === "--subject-kind" && args[i + 1]) {
+      const parsed = args[++i]!.toLowerCase();
       if (parsed === "asset" || parsed === "company" || parsed === "event") {
         subjectKind = parsed;
       } else {
@@ -115,6 +132,12 @@ function parseArgs(argv: string[]) {
         process.exit(1);
       }
     }
+  }
+
+  const resolvedDate = resolveNowSentinel(sourceDate);
+  if (resolvedDate !== sourceDate) {
+    sourceDate = resolvedDate;
+    console.error(`[route] Resolved --source-date "now" → ${sourceDate}`);
   }
 
   return { tickers, direction, sourceDate, capital, horizon, subjectKind, runId, outputMode, thesisId };
@@ -208,29 +231,9 @@ async function pushStatusEvent(sourceId: string, runId: string | null | undefine
   }
 }
 
-interface PerpCandidate {
-  full_symbol?: string;
-  base_symbol?: string;
-  dex?: string;
-}
-
-interface PerpInstrument {
-  available?: boolean;
-  hl_ticker?: string;
-  publish_price?: number;
-  note?: string;
-  candidate_perps?: PerpCandidate[];
-}
-
-interface ShareInstrument {
-  available?: boolean;
-  publish_price?: number;
-  note?: string;
-}
-
 interface RouteAlternative {
-  platform: "hyperliquid" | "robinhood";
-  instrument: "perps" | "shares";
+  platform: "hyperliquid" | "robinhood" | "polymarket";
+  instrument: "perps" | "shares" | "polymarket";
   routed_ticker: string;
   publish_price: number | null;
 }
@@ -240,60 +243,32 @@ interface RouteSummary {
   direction: Direction;
   executable: boolean;
   selected_expression: {
-    platform: "hyperliquid" | "robinhood" | null;
-    instrument: "perps" | "shares" | null;
+    platform: "hyperliquid" | "robinhood" | "polymarket" | null;
+    instrument: "perps" | "shares" | "polymarket" | null;
     routed_ticker: string | null;
     publish_price: number | null;
-  };
+  } & RoutingMetadata;
   alternatives: RouteAlternative[];
+  prediction_markets?: {
+    platform: "polymarket";
+    markets: Array<{
+      market_question: string;
+      market_slug: string;
+      condition_id: string | null;
+      buy_price_usd: number;
+      no_price: number;
+      volume_usd: number;
+      end_date: string | null;
+    }>;
+  };
   price_context: {
     current_price: number;
     source_date: string | null;
     source_date_price: number | null;
     since_published_move_pct: number | null;
   };
-  candidate_routes: Array<{
-    routed_ticker: string;
-    base_symbol: string | null;
-    dex: string | null;
-  }>;
+  candidate_routes: CandidateRoute[];
   note: string | null;
-}
-
-function toFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function toPerpInstrument(value: unknown): PerpInstrument | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as PerpInstrument;
-}
-
-function toShareInstrument(value: unknown): ShareInstrument | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as ShareInstrument;
-}
-
-function toCandidateRoutes(perps: PerpInstrument | null): RouteSummary["candidate_routes"] {
-  const candidates = Array.isArray(perps?.candidate_perps) ? perps!.candidate_perps : [];
-  return candidates
-    .map((candidate) => {
-      const routedTicker = typeof candidate?.full_symbol === "string" ? candidate.full_symbol.trim() : "";
-      if (!routedTicker) return null;
-      const baseSymbol = typeof candidate?.base_symbol === "string" && candidate.base_symbol.trim()
-        ? candidate.base_symbol.trim()
-        : null;
-      const dex = typeof candidate?.dex === "string" && candidate.dex.trim()
-        ? candidate.dex.trim()
-        : null;
-      return { routed_ticker: routedTicker, base_symbol: baseSymbol, dex };
-    })
-    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
 }
 
 function buildSummary(item: TickerAssessment): RouteSummary {
@@ -308,15 +283,18 @@ function buildSummary(item: TickerAssessment): RouteSummary {
     instrument: null,
     routed_ticker: null,
     publish_price: null,
+    ...EMPTY_ROUTING_METADATA,
   };
   const alternatives: RouteAlternative[] = [];
 
   if (perpsAvailable) {
+    const routedTicker = typeof perps?.hl_ticker === "string" && perps.hl_ticker.trim() ? perps.hl_ticker.trim() : item.ticker;
     selected = {
       platform: "hyperliquid",
       instrument: "perps",
-      routed_ticker: typeof perps?.hl_ticker === "string" && perps.hl_ticker.trim() ? perps.hl_ticker.trim() : item.ticker,
+      routed_ticker: routedTicker,
       publish_price: toFiniteNumber(item.source_date_price) ?? toFiniteNumber(perps?.publish_price) ?? canonicalPublishPrice,
+      ...extractPerpMetadata(perps, routedTicker),
     };
   } else if (sharesAvailable) {
     selected = {
@@ -324,6 +302,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
       instrument: "shares",
       routed_ticker: item.ticker,
       publish_price: toFiniteNumber(item.source_date_price) ?? toFiniteNumber(shares?.publish_price) ?? canonicalPublishPrice,
+      ...EMPTY_ROUTING_METADATA,
     };
   }
 
@@ -345,6 +324,26 @@ function buildSummary(item: TickerAssessment): RouteSummary {
     });
   }
 
+  // Polymarket markets
+  const pm = item.instruments?.polymarket as
+    | { available?: boolean; markets?: Array<Record<string, unknown>> }
+    | undefined;
+  let predictionMarkets: RouteSummary["prediction_markets"];
+  if (pm?.available && Array.isArray(pm.markets) && pm.markets.length) {
+    predictionMarkets = {
+      platform: "polymarket",
+      markets: pm.markets.map((m: any) => ({
+        market_question: m.question,
+        market_slug: m.slug,
+        condition_id: m.condition_id ?? null,
+        buy_price_usd: m.outcome_prices?.yes ?? 0,
+        no_price: m.outcome_prices?.no ?? 0,
+        volume_usd: m.volume_usd ?? 0,
+        end_date: m.end_date ?? null,
+      })),
+    };
+  }
+
   const noteCandidates = [perps?.note, shares?.note];
   const note = noteCandidates.find((value) => typeof value === "string" && value.trim())?.trim() ?? null;
 
@@ -354,6 +353,7 @@ function buildSummary(item: TickerAssessment): RouteSummary {
     executable: selected.platform !== null,
     selected_expression: selected,
     alternatives,
+    ...(predictionMarkets ? { prediction_markets: predictionMarkets } : {}),
     price_context: {
       current_price: item.current_price,
       source_date: typeof item.source_date === "string" ? item.source_date : null,
@@ -368,13 +368,9 @@ function buildSummary(item: TickerAssessment): RouteSummary {
 export async function runRouteCli(argv = process.argv): Promise<void> {
   const { tickers, direction, sourceDate, capital, horizon, subjectKind, runId, outputMode, thesisId } = parseArgs(argv);
 
-  console.error(
-    `\nRoute ${tickers.join(", ")} ${direction} | $${capital.toLocaleString()} capital`
-    + `${sourceDate ? ` | source: ${sourceDate}` : ""}`
-    + `${horizon ? ` | horizon: ${horizon}` : ""}`
-    + `${subjectKind !== "asset" ? ` | subject-kind: ${subjectKind}` : ""}`
-    + "\n"
-  );
+  const { streamLog } = await import("./stream-log");
+  const logOpts = thesisId ? { thesisId } : undefined;
+  streamLog(`Routing ${tickers.join(", ")} ${direction}...`, logOpts);
 
   let streamCtx: { source_id: string } | null = null;
   try {

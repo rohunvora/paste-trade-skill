@@ -115,7 +115,8 @@ During launch hardening, `@v1` is the canonical install and update channel. Move
 
 ```
 scripts/            CLI tools the skill agent calls
-adapters/           Market API adapters (instrument discovery)
+shared/             Utility functions (price canonicalization, sentinel resolution)
+adapters/           Market API adapters (instrument discovery, route field parsing)
 references/         Supplementary docs loaded by SKILL.md
 openclaw-plugin/    OpenClaw-only async command bridge for fast /trade acknowledgment
 docs/install/       Client-specific install guides

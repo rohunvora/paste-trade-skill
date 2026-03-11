@@ -8,9 +8,9 @@
  * Other URLs: markdown.new → raw fetch + HTML strip.
  *
  * Usage:
- *   bun run skill/scripts/extract.ts "https://youtube.com/watch?v=xxx"
- *   bun run skill/scripts/extract.ts "https://x.com/user/status/123"
- *   bun run skill/scripts/extract.ts "https://example.com/article"
+ *   bun run scripts/extract.ts "https://youtube.com/watch?v=xxx"
+ *   bun run scripts/extract.ts "https://x.com/user/status/123"
+ *   bun run scripts/extract.ts "https://example.com/article"
  *
  * Requires: yt-dlp (brew install yt-dlp) for YouTube
  * Optional: X_BEARER_TOKEN env var for X API (better rate limits, higher reliability)
@@ -1231,13 +1231,14 @@ async function main() {
   const url = process.argv[2];
   if (!url) {
     console.error(
-      "Usage: bun run skill/scripts/extract.ts <url>"
+      "Usage: bun run scripts/extract.ts <url>"
     );
     process.exit(1);
   }
 
   const type = classifyUrl(url);
-  console.error(`[transcript] Extracting ${type} content from: ${url}`);
+  const { streamLog } = await import("./stream-log");
+  streamLog(`Extracting ${type} content from: ${url}`);
 
   try {
     let result: string;
@@ -1257,7 +1258,7 @@ async function main() {
       const filePath = join(dir, `source-${hash}.json`);
       parsed.saved_to = filePath;
       await Bun.write(filePath, JSON.stringify(parsed));
-      console.error(`[transcript] Saved to ${filePath}`);
+      streamLog(`Saved to ${filePath}`);
     }
 
     // YouTube: omit transcript from stdout so the model sees metadata only.

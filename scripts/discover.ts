@@ -6,13 +6,14 @@
  * across all supported venues (Hyperliquid, Polymarket).
  *
  * Usage:
- *   bun run skill/scripts/discover.ts --catalog                     # HL non-crypto catalog
- *   bun run skill/scripts/discover.ts --query "defense spending"    # search all venues
- *   bun run skill/scripts/discover.ts --query "lakers" --platform polymarket
+ *   bun run scripts/discover.ts --catalog                     # HL non-crypto catalog
+ *   bun run scripts/discover.ts --query "defense spending"    # search all venues
+ *   bun run scripts/discover.ts --query "lakers" --platform polymarket
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { ensureKey, getBaseUrl, loadKey } from "./ensure-key";
+import { streamLog } from "./stream-log";
 
 const REQUEST_TIMEOUT_MS = Number(process.env.DISCOVER_BACKEND_TIMEOUT_MS || 30_000);
 
@@ -22,6 +23,7 @@ interface ParsedArgs {
   platforms?: string[];
   assetClasses?: string[];
   runId?: string | null;
+  thesisId?: string | null;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -30,6 +32,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 
   let mode: "catalog" | "query" | null = null;
   let query: string | undefined;
+  let thesisId: string | null = null;
   const platforms: string[] = [];
   const assetClasses: string[] = [];
 
@@ -43,6 +46,10 @@ function parseArgs(argv: string[]): ParsedArgs {
       query = args[++i]!;
       continue;
     }
+    if (args[i] === "--thesis-id" && args[i + 1]) {
+      thesisId = args[++i]!;
+      continue;
+    }
     if (args[i] === "--platform" && args[i + 1]) {
       platforms.push(args[++i]!.toLowerCase());
       continue;
@@ -54,7 +61,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   }
 
   if (!mode) {
-    console.error("Usage: bun run skill/scripts/discover.ts [--run-id <runId>] <--catalog | --query \"keywords\">");
+    console.error("Usage: bun run scripts/discover.ts [--run-id <runId>] <--catalog | --query \"keywords\">");
     console.error("Options:");
     console.error("  --catalog                    List all non-crypto HL instruments by asset class");
     console.error('  --query "keywords"           Search instruments across venues');
@@ -63,7 +70,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     process.exit(1);
   }
 
-  return { mode, query, platforms: platforms.length > 0 ? platforms : undefined, assetClasses: assetClasses.length > 0 ? assetClasses : undefined, runId };
+  return { mode, query, platforms: platforms.length > 0 ? platforms : undefined, assetClasses: assetClasses.length > 0 ? assetClasses : undefined, runId, thesisId };
 }
 
 async function getDiscoverAuth(): Promise<{ baseUrl: string; apiKey: string }> {
@@ -119,14 +126,25 @@ async function callBackendDiscover(parsed: ParsedArgs): Promise<unknown> {
 async function main() {
   const parsed = parseArgs(process.argv);
 
-  console.error(
-    `\nDiscover ${parsed.mode === "catalog" ? "catalog" : `"${parsed.query}"`}`
-    + `${parsed.platforms ? ` | platforms: ${parsed.platforms.join(", ")}` : ""}`
-    + `${parsed.assetClasses ? ` | asset-classes: ${parsed.assetClasses.join(", ")}` : ""}`
-    + "\n"
-  );
+  const logOpts = parsed.thesisId ? { thesisId: parsed.thesisId } : undefined;
+  streamLog(`Searching instruments for "${parsed.query ?? "catalog"}"...`, logOpts);
 
   const result = await callBackendDiscover(parsed);
+
+  // Stream what was found
+  if (parsed.mode === "query") {
+    const data = result as { results?: Array<{ ticker?: string; platform?: string; instrument?: string; question?: string }> };
+    const instruments = data.results?.slice(0, 3) ?? [];
+    if (instruments.length > 0) {
+      const summary = instruments
+        .map(r => r.question ? `"${r.question.slice(0, 50)}"` : `${r.ticker} (${r.platform} ${r.instrument})`)
+        .join(", ");
+      streamLog(`Found: ${summary}`, logOpts);
+    } else {
+      streamLog(`No instruments found for "${parsed.query}"`, logOpts);
+    }
+  }
+
   console.log(JSON.stringify(result, null, 2));
 }
 

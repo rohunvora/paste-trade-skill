@@ -3,7 +3,7 @@
  * Returns the source_id and source_url for live processing.
  *
  * Usage:
- *   bun run skill/scripts/create-source.ts '<JSON payload>'
+ *   bun run scripts/create-source.ts '<JSON payload>'
  *
  * Payload: { url, title, platform, source_date, author_handle, source_images,
  *           word_count?, duration_seconds?, speakers_count? }
@@ -15,7 +15,7 @@
 
 const payload = process.argv[2];
 if (!payload) {
-  console.error("Usage: bun run skill/scripts/create-source.ts '<JSON payload>'");
+  console.error("Usage: bun run scripts/create-source.ts '<JSON payload>'");
   process.exit(1);
 }
 
@@ -25,6 +25,13 @@ try {
 } catch {
   console.error(`[create-source] Invalid JSON payload: ${payload.slice(0, 200)}`);
   process.exit(1);
+}
+
+import { resolveNowSentinel } from "../shared/trade-pricing";
+const resolved = resolveNowSentinel(parsedPayload.source_date);
+if (resolved !== parsedPayload.source_date) {
+  parsedPayload.source_date = resolved;
+  console.error(`[create-source] Resolved source_date "now" → ${resolved}`);
 }
 
 // Extraction metadata — local-only, not sent to the API

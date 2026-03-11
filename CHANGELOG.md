@@ -5,6 +5,39 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - the first public install contract is `v1`
 
+## [1.2.0] - 2026-03-11
+
+Polymarket pipeline, dense/sparse reference docs, streaming progress, and bug fixes.
+
+### Changed
+
+- `create-source.ts` — resolves `"now"` sentinel to ISO datetime via `resolveNowSentinel`
+- `diarize.ts` — adds `stream-log` progress events and run-id support
+- `discover.ts` — adds `stream-log`, `--thesis-id` flag, result summary logging
+- `extract.ts` — adds `stream-log` progress events during extraction
+- `post.ts` — Polymarket handling (skip assess, normalize direction/instrument, probability pricing), HL ticker prefix stripping for deeplinks
+- `route.ts` — imports `route-fields.ts` for typed response parsing, Polymarket types, flag parsing fix (named flags before positional args), `resolveNowSentinel`, `stream-log`
+- `save.ts` — adds `instrument` field to selected expression
+- `source-excerpt.ts` — adds run-id, thesis-id, and stream-log progress
+
+### Added
+
+- `scripts/stream-log.ts` — stderr + live event push (fire-and-forget progress narration)
+- `shared/trade-pricing.ts` — `toFiniteNumber()`, `resolveNowSentinel()` utility functions
+- `adapters/route-fields.ts` — typed response parsing for `/api/skill/route` output
+- `references/dense.md` — LLM instructions for podcast/article extraction
+- `references/sparse.md` — LLM instructions for tweet/user thesis handling
+- `references/hl-universe.md` — Hyperliquid thematic universe reference
+- `references/prediction-markets.md` — Polymarket evaluation and posting reference
+- `references/index/` — dense-index.md, skill-ascii.md, skill-index.md, trade-index.md
+- SKILL.md updated with Polymarket as supported venue, dense/sparse reference pointers, streaming progress
+
+### Removed
+
+- `scripts/assess.ts` — stale alias (use `route.ts`)
+- `scripts/route-check.ts` — stale alias (use `route.ts`)
+- `references/glossary.md` — removed from dev
+
 ## [1.1.0] - 2026-03-08
 
 Full sync from canonical dev repo. Three days of improvements since launch.

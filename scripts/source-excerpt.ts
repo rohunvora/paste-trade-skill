@@ -11,11 +11,13 @@
  *   --around "exact quote"  Returns ~500 words surrounding an exact quote match
  *
  * Usage:
- *   bun run skill/scripts/source-excerpt.ts --file <saved_to> --query "compute NVIDIA OpenAI"
- *   bun run skill/scripts/source-excerpt.ts --file <saved_to> --around "who has the most compute"
+ *   bun run scripts/source-excerpt.ts --file <saved_to> --query "compute NVIDIA OpenAI"
+ *   bun run scripts/source-excerpt.ts --file <saved_to> --around "who has the most compute"
  */
 
 import { readFileSync } from "fs";
+import { applyRunId, extractRunIdArg } from "./run-id";
+import { getStreamContext, pushEvent } from "./stream-context";
 
 // ── Args ──────────────────────────────────────────────────────────
 
@@ -25,6 +27,7 @@ interface ParsedArgs {
   text: string;
   maxPassages: number;
   windowWords: number;
+  thesisId?: string;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -33,24 +36,26 @@ function parseArgs(argv: string[]): ParsedArgs {
   let text = "";
   let maxPassages = 5;
   let windowWords = 150;
+  let thesisId: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--file" && argv[i + 1]) { file = argv[++i]!; continue; }
     if (argv[i] === "--query" && argv[i + 1]) { mode = "query"; text = argv[++i]!; continue; }
     if (argv[i] === "--around" && argv[i + 1]) { mode = "around"; text = argv[++i]!; continue; }
+    if (argv[i] === "--thesis-id" && argv[i + 1]) { thesisId = argv[++i]!; continue; }
     if (argv[i] === "--max" && argv[i + 1]) { maxPassages = parseInt(argv[++i]!, 10); continue; }
     if (argv[i] === "--window" && argv[i + 1]) { windowWords = parseInt(argv[++i]!, 10); continue; }
   }
 
   if (!file || !mode || !text) {
-    console.error("Usage: bun run skill/scripts/source-excerpt.ts --file <path> <--query \"keywords\" | --around \"exact quote\">");
+    console.error("Usage: bun run scripts/source-excerpt.ts --file <path> <--query \"keywords\" | --around \"exact quote\">");
     console.error("Options:");
     console.error("  --max N        Max passages to return (default: 5)");
     console.error("  --window N     Words per passage window (default: 150)");
     process.exit(1);
   }
 
-  return { file, mode, text, maxPassages, windowWords };
+  return { file, mode, text, maxPassages, windowWords, thesisId };
 }
 
 // ── Source loading ────────────────────────────────────────────────
@@ -243,7 +248,10 @@ function aroundSearch(
 
 // ── Main ─────────────────────────────────────────────────────────
 
-const args = parseArgs(process.argv.slice(2));
+const { runId, args: rawArgs } = extractRunIdArg(process.argv);
+applyRunId(runId);
+
+const args = parseArgs(rawArgs);
 const sourceText = loadSourceText(args.file);
 
 if (!sourceText.trim()) {
@@ -262,5 +270,13 @@ const result = {
   source_file: args.file,
   source_words: sourceText.split(/\s+/).length,
 };
+
+// Stream progress event
+if (passages.length > 0) {
+  const { streamLog } = await import("./stream-log");
+  const preview = passages[0]!.text.slice(0, 80).replace(/\n/g, " ");
+  const label = args.mode === "query" ? args.text : `"${args.text}"`;
+  streamLog(`Context recovered for ${label}: "${preview}..."`, args.thesisId ? { thesisId: args.thesisId } : undefined);
+}
 
 console.log(JSON.stringify(result, null, 2));
