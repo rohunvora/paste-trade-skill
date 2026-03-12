@@ -29,7 +29,7 @@ merge_allowlist() {
     return
   fi
 
-  merged_allow="$({ EXISTING_ALLOW="${existing_allow}" PLUGIN_ID="${PLUGIN_ID}" node <<'NODE'
+  merged_allow="$(EXISTING_ALLOW="${existing_allow}" PLUGIN_ID="${PLUGIN_ID}" node <<'NODE'
 const raw = process.env.EXISTING_ALLOW ?? "";
 const pluginId = process.env.PLUGIN_ID ?? "";
 try {
@@ -46,7 +46,7 @@ try {
   process.stdout.write("");
 }
 NODE
-; })"
+)"
 
   if [[ -z "${merged_allow}" ]]; then
     echo "plugins.allow is not valid JSON array. Please add ${PLUGIN_ID} manually." >&2
