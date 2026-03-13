@@ -90,7 +90,7 @@ function parseArgs(argv: string[]) {
   }
 
   if (filteredArgs.length < 2) {
-    console.error("Usage: bun run scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
+    console.error("Usage: bun run skill/scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
     console.error("Options:");
     console.error("  --source-date YYYY-MM-DD   Price at source date for since-published P&L");
     console.error("  --capital NUMBER           Capital (default: 100000)");

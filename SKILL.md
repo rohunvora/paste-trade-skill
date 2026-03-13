@@ -330,7 +330,7 @@ Build a derivation chain for every routed trade:
 {
   "explanation": "1-2 sentences that explain the trade in plain English. No em dashes.",
   "segments": [
-    { "quote": "verbatim source quote", "speaker": "speaker name", "speaker_handle": "@handle" }
+    { "quote": "verbatim source quote", "speaker": "speaker name", "speaker_handle": "@handle", "timestamp": "14:22", "source_url": "https://..." }
   ],
   "steps": [
     { "text": "reasoning grounded in source", "segment": 0 },
@@ -358,17 +358,20 @@ available.
 - `url` on a step is a fallback when numbered inline linking does not fit
 - be honest when a step is your own inference
 - user thesis: their words are the segment, `speaker: "user"`
-- video/podcast: include timestamps; resolve speaker X handles when it materially helps attribution
+- video/podcast: every segment MUST include `timestamp` (MM:SS or H:MM:SS from diarized transcript) and `source_url` (the video URL). These power click-to-seek on the source page. Resolve speaker X handles when it materially helps attribution.
+- tweets: `timestamp` and `source_url` can be omitted (no timestamp concept for tweets)
 
 ### 9 - Price
 
 #### Instrument preference
 
 - Direct thesis subject on Hyperliquid → perps
+- ETF tickers → run `discover.ts --query "TICKER"` to check for an HL perp on the same underlying. Route the HL perp, not the ETF.
 - Sector/commodity/index thesis with an HL thematic equivalent → HL perps
   (not when the author named a specific company; their thesis is the company, not the sector)
-- Binary event thesis with a Polymarket contract → prediction market
-  (skip when the thesis is purely about price direction with no binary resolution)
+- Thesis contingent on a binary event with a Polymarket contract → prediction market
+  Compare the `resolution` field from discover results against the thesis.
+  (skip only when thesis is pure price conviction — no underlying yes/no question, no catalyst date)
 - Otherwise direct thesis subject via shares
 - If no direct executable route, use the best proxy
 

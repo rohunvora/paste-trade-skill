@@ -8,9 +8,9 @@
  * Other URLs: markdown.new → raw fetch + HTML strip.
  *
  * Usage:
- *   bun run scripts/extract.ts "https://youtube.com/watch?v=xxx"
- *   bun run scripts/extract.ts "https://x.com/user/status/123"
- *   bun run scripts/extract.ts "https://example.com/article"
+ *   bun run skill/scripts/extract.ts "https://youtube.com/watch?v=xxx"
+ *   bun run skill/scripts/extract.ts "https://x.com/user/status/123"
+ *   bun run skill/scripts/extract.ts "https://example.com/article"
  *
  * Requires: yt-dlp (brew install yt-dlp) for YouTube
  * Optional: X_BEARER_TOKEN env var for X API (better rate limits, higher reliability)
@@ -603,7 +603,7 @@ async function extractTweetViaFxTwitter(tweetId: string, handle: string): Promis
       tweet?: {
         text: string;
         created_at: string;
-        author: { screen_name: string; name: string };
+        author: { screen_name: string; name: string; avatar_url?: string };
         likes: number;
         retweets: number;
         replies: number;
@@ -648,11 +648,17 @@ async function extractTweetViaFxTwitter(tweetId: string, handle: string): Promis
     }
     const effectiveWordCount = effectiveText.split(/\s+/).filter(Boolean).length;
 
+    // Capture avatar URL and upgrade to 400x400 for high-quality profile pictures
+    const authorAvatarUrl = t.author.avatar_url
+      ? t.author.avatar_url.replace(/_normal\./, "_400x400.")
+      : undefined;
+
     return JSON.stringify({
       source: extractedArticle ? "fxtwitter_article" : "fxtwitter",
       url: `https://x.com/${t.author.screen_name}/status/${tweetId}`,
       author: t.author.screen_name,
       author_name: t.author.name,
+      ...(authorAvatarUrl ? { author_avatar_url: authorAvatarUrl } : {}),
       created_at: t.created_at,
       ...(fxPublishedAt ? { published_at: fxPublishedAt } : {}),
       text: effectiveText,
@@ -1231,7 +1237,7 @@ async function main() {
   const url = process.argv[2];
   if (!url) {
     console.error(
-      "Usage: bun run scripts/extract.ts <url>"
+      "Usage: bun run skill/scripts/extract.ts <url>"
     );
     process.exit(1);
   }

@@ -51,6 +51,11 @@ Read the canonical source artifact and find every tradeable thesis.
 
 **First pass**: list every directional belief, one line each, with the quote that most implies direction and the speaker who said it.
 
+A 30+ minute video or 3,000+ word article with fewer than 3 beliefs listed
+almost certainly means you stopped at the dominant thesis. Re-read for
+secondary claims: different asset classes, second-order effects the speaker
+called out, or contrarian positions they argued against.
+
 **Per belief, decompose**:
 - What pumps hardest if the directional belief is right?
 - What are the 2nd order effects?
@@ -183,17 +188,19 @@ After selecting the expression, stream the routing decision:
 bun run scripts/stream-thought.ts --run-id <run_id> "Routing [headline_quote snippet] → TICKER direction"
 ```
 
-For each candidate: is there a clear reasoning chain from the speaker's belief to this trade? Is there a better trade? If gaps, loop back to d-4 Research. Then pick 1-2. No redundant routes.
+For each candidate: is there a clear reasoning chain from the speaker's belief to this trade? Is there a better trade? If gaps, loop back to d-4 Research. Then pick 1-2 per thesis. No redundant routes.
 
 The trade ideas in `who` are starting context, not decisions. Routing may confirm them, improve on them, or find something better entirely. Pick the expression with the tightest link between the source quote and the instrument.
 
 **Instrument preference:**
 
 - Direct thesis subject on Hyperliquid → perps
+- ETF tickers → run `discover.ts --query "TICKER"` to check for an HL perp on the same underlying. Route the HL perp, not the ETF.
 - Sector/commodity/index thesis with HL thematic equivalent → HL perps
   (not when author named a specific company; their thesis is the company, not the sector)
-- Binary event thesis with a Polymarket contract → prediction market
-  (skip when thesis is purely about price direction with no binary resolution)
+- Thesis contingent on a binary event with a Polymarket contract → prediction market
+  Compare the `resolution` field from discover results against the thesis.
+  (skip only when thesis is pure price conviction — no underlying yes/no question, no catalyst date)
 - Otherwise direct thesis subject via shares
 - If no direct executable route, use best proxy
 - Sector-level instruments over single equities for broad theses
@@ -237,7 +244,7 @@ Build a derivation chain for every routed trade:
 {
   "explanation": "1-2 sentences that explain the trade in plain English. No em dashes.",
   "segments": [
-    { "quote": "speaker's verbatim words", "speaker": "speaker name", "speaker_handle": "@handle" }
+    { "quote": "speaker's verbatim words", "speaker": "speaker name", "speaker_handle": "@handle", "timestamp": "14:22", "source_url": "https://..." }
   ],
   "steps": [
     { "text": "reasoning grounded in source", "segment": 0 },
@@ -257,8 +264,9 @@ Steps should earn the conclusion, not summarize it. If the speaker named the tic
 - When a step depends on external research or a factual check, embed the source inline as numbered Markdown citations: `[1](url)`, `[2](url)`; treat this as part of the format, not decoration
 - `url` on a step is a fallback when numbered inline linking does not fit
 - 2-4 steps. Each step must advance the chain. If you can remove a step and the conclusion still follows, it was filler.
+- At least one step must cite external research (web search, not the source itself). A derivation backed only by speaker quotes is a restatement, not a verified thesis.
 - Be honest when a step is your own inference
-- Video/podcast: include timestamps; resolve speaker X handles when it materially helps attribution
+- Video/podcast: every segment MUST include `timestamp` (MM:SS or H:MM:SS from diarized transcript) and `source_url` (the video URL). These power click-to-seek on the source page. Resolve speaker X handles when it materially helps attribution.
 - Can cite surrounding context recovered by source-excerpt
 
 ### d-8 Validate and save

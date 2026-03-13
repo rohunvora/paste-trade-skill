@@ -57,6 +57,7 @@ export interface InstrumentMatch {
   name: string;                   // Human-readable name
   relevance: "direct" | "proxy" | "lateral";  // How closely it maps to the thesis
   why: string;                    // One-line explanation: "Direct Fed rate contract for March FOMC"
+  resolution?: string;            // PM resolution clause (first 500 chars). Compare to thesis before routing.
 }
 
 /** What each adapter's returns.ts exports */

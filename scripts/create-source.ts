@@ -3,7 +3,7 @@
  * Returns the source_id and source_url for live processing.
  *
  * Usage:
- *   bun run scripts/create-source.ts '<JSON payload>'
+ *   bun run skill/scripts/create-source.ts '<JSON payload>'
  *
  * Payload: { url, title, platform, source_date, author_handle, source_images,
  *           word_count?, duration_seconds?, speakers_count? }
@@ -15,7 +15,7 @@
 
 const payload = process.argv[2];
 if (!payload) {
-  console.error("Usage: bun run scripts/create-source.ts '<JSON payload>'");
+  console.error("Usage: bun run skill/scripts/create-source.ts '<JSON payload>'");
   process.exit(1);
 }
 
@@ -34,13 +34,13 @@ if (resolved !== parsedPayload.source_date) {
   console.error(`[create-source] Resolved source_date "now" → ${resolved}`);
 }
 
-// Extraction metadata — local-only, not sent to the API
+// run_id: passed through to the API so the backend's run ID stays in sync
+// with the wrapper's tracing ID.
 const providedRunId = typeof parsedPayload.run_id === "string" ? parsedPayload.run_id.trim() : "";
 if (providedRunId && providedRunId.length > 64) {
   console.error(`[create-source] run_id too long (${providedRunId.length}). Max 64.`);
   process.exit(1);
 }
-delete parsedPayload.run_id;
 
 const extractionMeta = {
   word_count: parsedPayload.word_count,
@@ -89,8 +89,9 @@ try {
   const cleaned = cleanupStaleContextFiles();
   if (cleaned > 0) console.error(`[create-source] Cleaned ${cleaned} stale context file(s)`);
 
-  // Generate a unique run_id for this processing run
-  const runId = providedRunId || result.run_id || crypto.randomUUID().slice(0, 12);
+  // Use the backend's run_id (canonical).
+  // Falls back to the wrapper's provided ID or a random UUID.
+  const runId = result.run_id || providedRunId || crypto.randomUUID().slice(0, 12);
   writeStreamContext({
     source_id: result.source_id,
     source_url: result.source_url,

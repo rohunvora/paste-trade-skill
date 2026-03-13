@@ -6,8 +6,8 @@
  * that break shell quoting).
  *
  * Usage:
- *   bun run scripts/post.ts '<JSON payload>'
- *   echo '<JSON>' | bun run scripts/post.ts
+ *   bun run skill/scripts/post.ts '<JSON payload>'
+ *   echo '<JSON>' | bun run skill/scripts/post.ts
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
@@ -25,7 +25,7 @@ if (!payload) {
   payload = await Bun.stdin.text();
 }
 if (!payload?.trim()) {
-  console.error("Usage: bun run scripts/post.ts '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run skill/scripts/post.ts '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 payload = payload.trim();
@@ -452,13 +452,17 @@ if (platform === "polymarket") {
   // Normalize PM instrument: must be "polymarket" for frontend display (YES/NO, cent pricing, PmBlock)
   if (typeof body.instrument === "string" && body.instrument !== "polymarket") body.instrument = "polymarket";
 
-  // buy_price_usd IS the canonical price for PM trades
+  // buy_price_usd is always the YES token price (Polymarket convention).
+  // source_date_price and publish_price stay on the YES scale so P&L math
+  // works against the live price endpoint (which also returns the YES price).
+  // Only market_implied_prob is direction-aware (drives the % chance display).
   const buyPrice = toFiniteNumber(body.buy_price_usd);
   if (buyPrice != null && buyPrice > 0 && buyPrice <= 1) {
     body.source_date_price = buyPrice;
     body.publish_price = buyPrice;
     if (body.market_implied_prob === undefined) {
-      body.market_implied_prob = buyPrice;
+      const isNo = body.direction === "short";
+      body.market_implied_prob = isNo ? 1 - buyPrice : buyPrice;
     }
   }
   // Warn if PM price looks like a stock price (should be 0-1 probability)
@@ -547,7 +551,7 @@ try {
     }, { runId });
 
     if (body.source_theses && Array.isArray(body.source_theses)) {
-      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run scripts/finalize-source.ts ...");
+      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run skill/scripts/finalize-source.ts ...");
     }
   }
 } catch { /* streaming is optional */ }

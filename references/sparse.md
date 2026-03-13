@@ -48,6 +48,14 @@ Validation: every `subjects[].label` needs a matching `direct_checks[].subject_l
 
 
 
+## List detection
+
+If the source lists items that need independent reasoning chains — distinct
+commodities, opposing directions, or unrelated tickers — each is a separate
+thesis. Items that share the same belief and catalyst are one thesis with
+multiple `who` entries. Extract all theses, save with `batch-save --total N`,
+then run the tree below per thesis.
+
 ## Take the original source and run this process:
 
 ```
@@ -63,7 +71,7 @@ SPARSE SOURCE
 │  └─ What are the best possible trades? → `who` entries (1-3)
 │
 ├─ SAVE
-│  echo '[{...}]' | batch-save.ts --run-id <run_id> --total 1
+│  echo '[{...}]' | batch-save.ts --run-id <run_id> --total <N>
 │  Track thesis ID for route.ts and save --update.
 │  stream-thought.ts --run-id <run_id> "Researching..."
 │
@@ -86,6 +94,8 @@ SPARSE SOURCE
 │
 ├─ PICK
 │  Prefer: HL perps > HL thematic > PM binary > shares > proxy
+│  ETF tickers: discover.ts --query "TICKER" for HL perp equivalent.
+│  PM skip: only when pure price conviction, no binary event.
 │  Clearest reasoning chain from thesis to trade
 │  Upcoming catalyst
 │  Tightest link between source quote and instrument
