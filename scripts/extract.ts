@@ -463,8 +463,8 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
   if (!X_BEARER_TOKEN) return null;
 
   const params = new URLSearchParams({
-    "tweet.fields": "created_at,public_metrics,note_tweet,author_id,entities,attachments",
-    expansions: "author_id,attachments.media_keys",
+    "tweet.fields": "created_at,public_metrics,note_tweet,author_id,entities,attachments,referenced_tweets",
+    expansions: "author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id",
     "user.fields": "username,name",
     "media.fields": "url,preview_image_url,type,alt_text",
   });
@@ -501,10 +501,12 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
           reply_count: number;
           impression_count: number;
         };
+        referenced_tweets?: Array<{ type: string; id: string }>;
       };
       includes?: {
-        users?: Array<{ username: string; name: string }>;
+        users?: Array<{ id?: string; username: string; name: string }>;
         media?: Array<{ type: string; url?: string; preview_image_url?: string; alt_text?: string }>;
+        tweets?: Array<{ id: string; text: string; author_id?: string; note_tweet?: { text: string } }>;
       };
     };
 
@@ -555,6 +557,13 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
 
     const effectiveWordCount = effectiveText.split(/\s+/).filter(Boolean).length;
 
+    // Extract quoted tweet if present
+    const quotedRef = t.referenced_tweets?.find(r => r.type === "quoted");
+    const quotedTweet = quotedRef ? data.includes?.tweets?.find(qt => qt.id === quotedRef.id) : null;
+    const quotedAuthor = quotedTweet?.author_id
+      ? data.includes?.users?.find(u => u.id === quotedTweet.author_id)
+      : null;
+
     return JSON.stringify({
       source: extractedArticle ? "x_api_article" : "x_api",
       url: `https://x.com/${username}/status/${tweetId}`,
@@ -574,6 +583,7 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
             ...(extractedArticle.article_title ? { article_title: extractedArticle.article_title } : {}),
           }
         : {}),
+      ...(quotedTweet ? { quoted_tweet: { author: quotedAuthor?.username ?? "unknown", text: quotedTweet.note_tweet?.text ?? quotedTweet.text } } : {}),
       likes: t.public_metrics?.like_count ?? 0,
       retweets: t.public_metrics?.retweet_count ?? 0,
       replies: t.public_metrics?.reply_count ?? 0,
@@ -611,6 +621,10 @@ async function extractTweetViaFxTwitter(tweetId: string, handle: string): Promis
         is_note_tweet?: boolean;
         media?: {
           photos?: Array<{ url: string; altText?: string }>;
+        };
+        quote?: {
+          text: string;
+          author: { screen_name: string; name: string };
         };
       };
     };
@@ -673,6 +687,7 @@ async function extractTweetViaFxTwitter(tweetId: string, handle: string): Promis
             ...(extractedArticle.article_title ? { article_title: extractedArticle.article_title } : {}),
           }
         : {}),
+      ...(t.quote ? { quoted_tweet: { author: t.quote.author.screen_name, text: t.quote.text } } : {}),
       likes: t.likes ?? 0,
       retweets: t.retweets ?? 0,
       replies: t.replies ?? 0,
@@ -1263,6 +1278,33 @@ async function main() {
       mkdirSync(dir, { recursive: true });
       const filePath = join(dir, `source-${hash}.json`);
       parsed.saved_to = filePath;
+
+      // Download attached images to local files so the skill agent can read
+      // them with vision (charts, screenshots, diagrams are critical context).
+      if (Array.isArray(parsed.images) && parsed.images.length > 0) {
+        const imageFiles: string[] = [];
+        for (let i = 0; i < Math.min(parsed.images.length, 4); i++) {
+          const img = parsed.images[i];
+          const imgUrl = typeof img === "string" ? img : img?.url;
+          if (!imgUrl) continue;
+          try {
+            const imgRes = await fetch(imgUrl);
+            if (imgRes.ok) {
+              const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
+              const imgPath = join(dir, `source-${hash}-img${i}.${ext}`);
+              await Bun.write(imgPath, await imgRes.arrayBuffer());
+              imageFiles.push(imgPath);
+              console.error(`[transcript] Downloaded image ${i + 1}: ${imgPath}`);
+            }
+          } catch (e: any) {
+            console.error(`[transcript] Failed to download image ${i + 1}: ${e.message}`);
+          }
+        }
+        if (imageFiles.length > 0) {
+          parsed.image_files = imageFiles;
+        }
+      }
+
       await Bun.write(filePath, JSON.stringify(parsed));
       streamLog(`Saved to ${filePath}`);
     }
