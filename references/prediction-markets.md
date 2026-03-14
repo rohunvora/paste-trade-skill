@@ -99,7 +99,7 @@ consider:
 When routing to Polymarket, the trade needs specific fields:
 
 **Top-level fields:**
-- `ticker`: the market slug (e.g., "us-recession-by-end-of-2026")
+- `ticker`: the market slug from discover.ts output (e.g., "us-recession-by-end-of-2026"). Never invent a slug — use exactly what discover.ts returned.
 - `platform`: "polymarket"
 - `instrument`: "polymarket" (this is `trades.instrument`, not `tickers.instrument_type`)
 - `publish_price`: set to `buy_price_usd` (the 0-1 contract price)
@@ -109,7 +109,7 @@ When routing to Polymarket, the trade needs specific fields:
 - `buy_price_usd`: the YES contract price (0-1 range) — this IS the publish_price
 - `market_implied_prob`: same value as `buy_price_usd` for binary markets (the price IS the implied probability). Store both — display surfaces read `market_implied_prob` as the semantic probability field.
 - `market_slug`: for deeplinks back to Polymarket
-- `condition_id`: the contract identifier (from discover.ts results)
+- `condition_id`: **required** — the contract identifier from discover.ts results. Without this, the trade cannot price. Copy verbatim from discover.ts output.
 - `market_question`: the full market question text
 - `end_date`: resolution date
 - `volume_usd`: market volume
