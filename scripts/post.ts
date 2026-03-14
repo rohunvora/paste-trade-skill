@@ -50,6 +50,8 @@ interface SavedExtractionRecord {
   routed?: boolean;
   who?: unknown;
   route_evidence?: unknown;
+  headline_quote?: unknown;
+  derivation?: unknown;
 }
 
 function normalizeText(value: unknown): string {
