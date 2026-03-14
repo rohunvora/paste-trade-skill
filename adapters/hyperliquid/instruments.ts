@@ -5,9 +5,9 @@
  * (default + selected HIP-3 dexes), and returns enriched metadata.
  *
  * Usage:
- *   bun run skill-dev/runtime/adapters/hyperliquid/instruments.ts "SOL,BTC,ETH"
- *   bun run skill-dev/runtime/adapters/hyperliquid/instruments.ts "SPACEX,USA500,USTECH"
- *   bun run skill-dev/runtime/adapters/hyperliquid/instruments.ts --query "defense spending"
+ *   bun run adapters/hyperliquid/instruments.ts "SOL,BTC,ETH"
+ *   bun run adapters/hyperliquid/instruments.ts "SPACEX,USA500,USTECH"
+ *   bun run adapters/hyperliquid/instruments.ts --query "defense spending"
  */
 
 import type { InstrumentMatch, AdapterInstrumentResult } from "../../types";
@@ -221,8 +221,8 @@ function parseArgs():
   }
 
   if (!args.length) {
-    console.error('Usage: bun run skill-dev/runtime/adapters/hyperliquid/instruments.ts "SOL,BTC,ETH"');
-    console.error('       bun run skill-dev/runtime/adapters/hyperliquid/instruments.ts --query "defense spending"');
+    console.error('Usage: bun run adapters/hyperliquid/instruments.ts "SOL,BTC,ETH"');
+    console.error('       bun run adapters/hyperliquid/instruments.ts --query "defense spending"');
     console.error("       Add --compact to reduce output payload size.");
     process.exit(1);
   }
@@ -230,7 +230,7 @@ function parseArgs():
   if (args[0] === "--query") {
     const query = args.slice(1).join(" ").trim();
     if (!query) {
-      console.error('Usage: bun run skill-dev/runtime/adapters/hyperliquid/instruments.ts --query "defense spending"');
+      console.error('Usage: bun run adapters/hyperliquid/instruments.ts --query "defense spending"');
       process.exit(1);
     }
     return { mode: "query", query, compact };

@@ -90,7 +90,7 @@ function parseArgs(argv: string[]) {
   }
 
   if (filteredArgs.length < 2) {
-    console.error("Usage: bun run skill/scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
+    console.error("Usage: bun run scripts/route.ts [--run-id <runId>] <TICKER[,TICKER]> <long|short> [options]");
     console.error("Options:");
     console.error("  --source-date YYYY-MM-DD   Price at source date for since-published P&L");
     console.error("  --capital NUMBER           Capital (default: 100000)");
@@ -289,11 +289,14 @@ function buildSummary(item: TickerAssessment): RouteSummary {
 
   if (perpsAvailable) {
     const routedTicker = typeof perps?.hl_ticker === "string" && perps.hl_ticker.trim() ? perps.hl_ticker.trim() : item.ticker;
+    // For alias matches (GLD→GOLD), the perp publish_price is in perp units ($5,094)
+    // while item.source_date_price is in ETF units ($468). Prefer the perp's own price.
+    const perpPublishPrice = toFiniteNumber(perps?.publish_price);
     selected = {
       platform: "hyperliquid",
       instrument: "perps",
       routed_ticker: routedTicker,
-      publish_price: toFiniteNumber(item.source_date_price) ?? toFiniteNumber(perps?.publish_price) ?? canonicalPublishPrice,
+      publish_price: perpPublishPrice ?? toFiniteNumber(item.source_date_price) ?? canonicalPublishPrice,
       ...extractPerpMetadata(perps, routedTicker),
     };
   } else if (sharesAvailable) {

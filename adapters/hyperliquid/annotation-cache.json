@@ -1,0 +1,373 @@
+{
+  "fetched_at": "2026-03-09T19:46:58.117Z",
+  "annotations": {
+    "flx:btc": {
+      "category": "crypto",
+      "description": "A perpetual future contract tracking the price of Bitcoin (BTC). Each contract represents 1 BTC, the largest cryptocurrency by market capitalization. Bitcoin operates on a decentralized blockchain network and is widely used as a digital store of value."
+    },
+    "flx:coin": {
+      "category": "stocks",
+      "description": "A perpetual future tracking the price of the Coinbase single-ticker equity (COIN). Coinbase Global, Inc. is a leading U.S.-based cryptocurrency exchange and financial infrastructure company founded in 2012 by Brian Armstrong and Fred Ehrsam. The company provides a platform for individuals and institutions to buy, sell, store, and manage digital assets such as Bitcoin and Ethereum."
+    },
+    "flx:copper": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of Copper. One contract represents one pound of copper, an industrial metal widely used in electrical wiring, construction, electronics, and manufacturing."
+    },
+    "flx:crcl": {
+      "category": "stocks",
+      "description": "A perpetual future tracking the price of the Circle single-ticker equity (CRCL). Circle Internet Group, Inc. develops technology that enables businesses and developers to move money using stablecoins and public blockchain networks."
+    },
+    "flx:gas": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of Natural Gas (Henry Hub). One contract represents one British thermal unit (MMBtu) of natural gas used for electricity generation, heating, and industrial energy."
+    },
+    "flx:gold": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of Gold. One contract represents 1 troy ounces of gold, a precious metal widely used as a store of value, investment asset, and hedge against inflation."
+    },
+    "flx:nvda": {
+      "category": "stocks",
+      "description": "A perpetual future tracking the price of the NVIDIA single-ticker equity (NVDA).  NVIDIA is a U.S. technology company that designs graphics processing units (GPUs), computing platforms, and artificial intelligence infrastructure."
+    },
+    "flx:oil": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of WTI crude oil based. One contract represents one barrel of crude oil, a key global energy commodity used to produce fuels such as gasoline, diesel, and jet fuel."
+    },
+    "flx:palladium": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of Palladium. One contract represents one troy ounce of palladium, a precious metal primarily used in catalytic converters and industrial applications."
+    },
+    "flx:platinum": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of Platinum. One contract represents one troy ounce of platinum, a precious metal used in catalytic converters, jewelry, electronics, and hydrogen technologies."
+    },
+    "flx:silver": {
+      "category": "commodities",
+      "description": "A perpetual future contract tracking the price of Silver. One contract represents one troy ounce of silver, a precious and industrial metal used in electronics, solar panels, jewelry, and investment products."
+    },
+    "flx:tsla": {
+      "category": "stocks",
+      "description": "A perpetual future tracking the price of the Tesla single-ticker equity (TSLA). Tesla, Inc. is an American electric vehicle and clean energy company founded in 2003. The company designs and manufactures electric vehicles, battery storage systems, and renewable energy products."
+    },
+    "flx:usde": {
+      "category": "crypto",
+      "description": "A perpetual future contract tracking the price of Ethena USDe. Each contract represents 1 USDe, a synthetic dollar stablecoin designed to maintain a value near $1 through delta-neutral hedging strategies using crypto derivatives."
+    },
+    "flx:xmr": {
+      "category": "crypto",
+      "description": "A perpetual future contract tracking the price of Monero (XMR). Each contract represents 1 XMR, a privacy-focused cryptocurrency designed to enable confidential transactions using advanced cryptography that obscures sender, receiver, and transaction amounts."
+    },
+    "km:aapl": {
+      "category": "stocks",
+      "description": "Apple Inc. Global technology company that designs, manufactures, and markets consumer electronics, software, and digital services, including the iPhone, Mac, iPad, and Apple Services ecosystem. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:baba": {
+      "category": "stocks",
+      "description": "Alibaba Group Holding Limited (ADR). Chinese multinational technology conglomerate operating across e-commerce, cloud computing, digital media, and financial services. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:gldmine": {
+      "category": "indices",
+      "description": "Provides exposure to a diversified basket of publicly listed companies engaged in gold mining, exploration, and production activities globally, spanning large- and mid-cap producers. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:gold": {
+      "category": "commodities",
+      "description": "Represents the spot price of gold bullion, widely regarded as a store of value, inflation hedge, and safe-haven asset during periods of market uncertainty. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:googl": {
+      "category": "stocks",
+      "description": "Alphabet Inc (Class A). Parent company of Google, operating across internet search, digital advertising, cloud computing, autonomous vehicles, and artificial intelligence research. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:mu": {
+      "category": "stocks",
+      "description": "Micron Technology, Inc. Global semiconductor company specialising in the design and manufacture of memory and storage solutions, including DRAM, NAND flash, and solid-state drives. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:nvda": {
+      "category": "stocks",
+      "description": "NVIDIA Corporation. Leading semiconductor company specialising in the design of graphics processing units (GPUs), data center accelerators, and AI computing platforms. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:pltr": {
+      "category": "stocks",
+      "description": "Palantir Technologies Inc. Defence-focused data analytics and software company delivering AI-driven platforms for large-scale data integration and operational intelligence across government, national security, and commercial sectors. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:semi": {
+      "category": "indices",
+      "description": "Provides exposure to approximately 30 publicly listed U.S. companies across the semiconductor value chain, including firms involved in chip design, fabrication, packaging, and the manufacture of semiconductor equipment. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:silver": {
+      "category": "commodities",
+      "description": "Represents the spot price of silver bullion, a precious and industrial metal with demand spanning investment, electronics, solar energy, and manufacturing applications. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:small2000": {
+      "category": "indices",
+      "description": "Provides exposure to approximately 2,000 smaller U.S. publicly traded companies, representing the small-capitalisation segment of the US equity market. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:tsla": {
+      "category": "stocks",
+      "description": "Tesla, Inc. Vertically integrated electric vehicle and clean energy company engaged in the design, manufacturing, and sale of EVs, battery storage systems, and solar energy products. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:us500": {
+      "category": "indices",
+      "description": "Provides broad exposure to 500 of the largest U.S. companies by market capitalisation, spanning all major sectors of the US equity market. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:usenergy": {
+      "category": "indices",
+      "description": "Provides exposure to U.S.-listed companies in the energy sector, encompassing oil and gas exploration, production, refining, transportation, and energy equipment and services. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "km:usoil": {
+      "category": "commodities",
+      "description": "Provides exposure to U.S. listed instrument(s) that seek to track daily price movements of WTI crude oil through near-month futures contracts. This listing does not reflect the spot price of crude oil. Please refer to km docs for further information on oracle design. Primary oracle pricing reference: NYSE:USO."
+    },
+    "km:ustech": {
+      "category": "indices",
+      "description": "Provides exposure to 100 of the largest non-financial companies listed on U.S. exchanges, with a concentration in technology, communications, and high-growth sectors. Please refer to km docs for further info on oracle reference pricing sources and design."
+    },
+    "vntl:anthropic": {
+      "category": "preipo",
+      "description": "ANTHROPIC tracks the total valuation of Anthropic, in billions. E.g. if 1 ANTHROPIC = $500, then the implied total valuation of the company is $500B."
+    },
+    "vntl:biotech": {
+      "category": "indices",
+      "description": "BIOTECH tracks the XBI ETF, which represents the engine of medical innovation. It uses an equal-weighted approach to capture the biotechnology sector, providing high-growth exposure to smaller firms developing next-gen drugs and life-saving therapies."
+    },
+    "vntl:defense": {
+      "category": "indices",
+      "description": "DEFENSE tracks the SHLD ETF, which captures the tech-driven defense revolution. It offers targeted exposure to AI-powered cybersecurity, big data analytics, and next-gen hardware like autonomous robotics and advanced aerospace."
+    },
+    "vntl:energy": {
+      "category": "indices",
+      "description": "ENERGY tracks the XLE ETF, which offers exposure to the American energy machine. It focuses on the largest U.S. players in the oil, gas, and consumable fuel sectors, capturing the full spectrum of energy production, refining, and distribution."
+    },
+    "vntl:goldjm": {
+      "category": "indices",
+      "description": "GOLDJM tracks the GDXJ ETF, offering high-beta exposure to the gold sector. It targets the junior miners acting as the primary engine for new discoveries by deploying AI-driven drill targeting, satellite-based mineral detection, and autonomous, water-neutral processing. A high-volatility play on the tightening global gold supply and the modernization of resource extraction."
+    },
+    "vntl:infotech": {
+      "category": "indices",
+      "description": "INFOTECH tracks the XLK ETF, which offers exposure to companies in the S&P 500 technology sector, spanning enterprise software, cloud infrastructure, and world-class hardware manufacturing."
+    },
+    "vntl:mag7": {
+      "category": "indices",
+      "description": "MAG7 tracks the MAGS ETF, which offers equal weight exposure to the “Magnificent Seven” stocks – Alphabet, Amazon, Apple, Meta, Microsoft, Nvidia, and Tesla."
+    },
+    "vntl:nuclear": {
+      "category": "indices",
+      "description": "NUCLEAR tracks the NLR ETF, which offers total-market exposure to the nuclear renaissance. It captures the entire value chain, from uranium mining and fuel enrichment to nuclear plant construction and the utilities generating carbon-free baseload power."
+    },
+    "vntl:openai": {
+      "category": "preipo",
+      "description": "OPENAI tracks the total valuation of OpenAI, in billions. E.g. if 1 OPENAI = $500, then the implied total valuation of the company is $500B."
+    },
+    "vntl:robot": {
+      "category": "indices",
+      "description": "ROBOT tracks the BOTZ ETF, which offers exposure to the future of physical intelligence. It targets the AI and robotics revolution, investing in global leaders across industrial automation, surgical robotics, and autonomous vehicle technology."
+    },
+    "vntl:semis": {
+      "category": "indices",
+      "description": "SEMIS tracks the SMH ETF, which offers exposure to the semiconductor industry — the backbone of modern computing. It focuses on the companies that design, manufacture, and distribute the chips powering everything from smartphones to AI data centers."
+    },
+    "vntl:silverjm": {
+      "category": "indices",
+      "description": "SILVERJM tracks the SILJ ETF, providing high-beta exposure to the silver sector. It focuses on junior miners who are essential to the AI hardware build-out and green energy transition, utilizing frontier technology to accelerate discovery and production. A high-volatility play on the structural silver deficit and the metal's critical role as a strategic industrial input."
+    },
+    "vntl:spacex": {
+      "category": "preipo",
+      "description": "SPACEX tracks the total valuation of SpaceX, in billions. E.g. if 1 SPACEX = $500, then the implied total valuation of the company is $500B."
+    },
+    "xyz:aapl": {
+      "category": "stocks",
+      "description": "AAPL tracks the value of 1 share of common stock in Apple Inc. Apple designs consumer electronics, software, and services including the iPhone, Mac, iPad, and Apple Watch, generating revenue across hardware, digital services, and ecosystem products."
+    },
+    "xyz:aluminium": {
+      "category": "commodities",
+      "description": "ALUMINIUM tracks the value of 1 metric ton of aluminum. Aluminum is a lightweight industrial metal widely used in transportation, construction, packaging, and power infrastructure."
+    },
+    "xyz:amd": {
+      "category": "stocks",
+      "description": "AMD tracks the value of 1 share of common stock in Advanced Micro Devices, Inc. AMD designs high-performance processors and graphics chips used in PCs, gaming consoles, data centers, and AI workloads."
+    },
+    "xyz:amzn": {
+      "category": "stocks",
+      "description": "AMZN tracks the value of 1 share of common stock in Amazon.com, Inc. Amazon operates a global e-commerce marketplace and cloud computing platform (AWS), alongside digital media and logistics services."
+    },
+    "xyz:baba": {
+      "category": "stocks",
+      "description": "BABA tracks the value of 1 American depositary share of Alibaba Group Holding Ltd. Alibaba operates e-commerce marketplaces, cloud services, and digital payments in China."
+    },
+    "xyz:brentoil": {
+      "category": "commodities",
+      "description": "BRENTOIL tracks the value of 1 barrel of Brent Crude Oil. Brent is the world's primary oil benchmark, pricing approximately 70% of globally traded crude, and reflects global seaborne oil market fundamentals."
+    },
+    "xyz:cl": {
+      "category": "commodities",
+      "description": "CL tracks the value of 1 barrel of West Texas Intermediate (WTI) Light Sweet Crude Oil. WTI serves as a primary global benchmark for oil prices due to its high quality (low density, low sulfur)."
+    },
+    "xyz:coin": {
+      "category": "stocks",
+      "description": "COIN tracks the value of 1 share of common stock in Coinbase Global, Inc. Coinbase operates a cryptocurrency exchange providing trading, custody, and digital asset infrastructure."
+    },
+    "xyz:copper": {
+      "category": "commodities",
+      "description": "COPPER tracks the value of 1 pound of copper. Copper is a core industrial metal and a widely followed barometer of global manufacturing and infrastructure demand."
+    },
+    "xyz:cost": {
+      "category": "stocks",
+      "description": "COST tracks the value of 1 share of common stock in Costco Wholesale Corporation. Costco operates membership-based warehouse retail stores offering bulk goods and groceries."
+    },
+    "xyz:crcl": {
+      "category": "stocks",
+      "description": "CRCL tracks the value of 1 share of common stock in Circle Internet Group, Inc. Circle issues and manages USDC, a U.S. dollar-backed stablecoin, and provides digital asset infrastructure for payments and financial services."
+    },
+    "xyz:crwv": {
+      "category": "stocks",
+      "description": "CRWV tracks the value of 1 share of common stock in CoreWeave, Inc. CoreWeave provides GPU cloud infrastructure optimized for AI and high-performance computing workloads."
+    },
+    "xyz:dxy": {
+      "category": "fx",
+      "description": "DXY tracks a U.S. dollar basket index, measuring the value of the U.S. dollar against six major foreign currencies: the euro, Japanese yen, British pound, Canadian dollar, Swedish krona, and Swiss franc."
+    },
+    "xyz:eur": {
+      "category": "fx",
+      "description": "EUR tracks the EUR/USD exchange rate. The euro (EUR) is the official currency of the Eurozone and one of the most actively traded currencies in global foreign exchange markets."
+    },
+    "xyz:ewj": {
+      "category": "stocks",
+      "description": "EWJ tracks the value of 1 share of the MSCI Japan ETF. The ETF seeks to track the investment results of an index composed of Japanese equities."
+    },
+    "xyz:ewy": {
+      "category": "stocks",
+      "description": "EWY tracks the value of 1 share of the MSCI South Korea ETF. The ETF seeks to track the investment results of an index composed of South Korean equities."
+    },
+    "xyz:gme": {
+      "category": "stocks",
+      "description": "GME tracks the value of 1 share of common stock in GameStop Corp. GameStop is a retailer focused on video games, consumer electronics, and collectibles."
+    },
+    "xyz:gold": {
+      "category": "commodities",
+      "description": "GOLD tracks the value of 1 troy ounce of gold. Gold is a globally traded precious metal widely used as a store of value, an inflation hedge, and a central bank reserve asset."
+    },
+    "xyz:googl": {
+      "category": "stocks",
+      "description": "GOOGL tracks the value of 1 share of Class A common stock in Alphabet Inc. Alphabet is the parent company of Google, operating search, advertising, cloud computing, and AI businesses, along with various technology subsidiaries."
+    },
+    "xyz:hood": {
+      "category": "stocks",
+      "description": "HOOD tracks the value of 1 share of common stock in Robinhood Markets, Inc. Robinhood operates a retail brokerage platform offering commission-free trading in equities, options, and cryptocurrencies to individual investors."
+    },
+    "xyz:hyundai": {
+      "category": "stocks",
+      "description": "HYUNDAI tracks the value of 1 share of common stock in Hyundai Motor Company. The oracle converts the underlying Korean stock's KRW price to USD at the prevailing USD/KRW FX rate. Hyundai is a global automobile manufacturer; Hyundai Motor Group holds an 80% stake in robotics firm Boston Dynamics."
+    },
+    "xyz:intc": {
+      "category": "stocks",
+      "description": "INTC tracks the value of 1 share of common stock in Intel Corporation. Intel designs and manufactures semiconductors and computing platforms. The company produces CPUs and related hardware for personal computers, servers, and data centers."
+    },
+    "xyz:jp225": {
+      "category": "indices",
+      "description": "JP225 tracks a JPY-based, price-weighted index of 225 leading Japanese companies, serving as the primary benchmark for the Japanese equity market. The oracle follows the index's native level without FX conversion."
+    },
+    "xyz:jpy": {
+      "category": "fx",
+      "description": "JPY tracks the USD/JPY exchange rate. The Japanese yen (JPY) is the official currency of Japan and one of the most actively traded currencies in global foreign exchange markets."
+    },
+    "xyz:kioxia": {
+      "category": "stocks",
+      "description": "KIOXIA tracks the value of 1 share of common stock in Kioxia Holdings Corporation. The oracle converts the underlying Japanese stock's JPY price to USD at the prevailing USD/JPY FX rate. Kioxia is a leading manufacturer of NAND flash memory and solid-state storage solutions used in data centers, smartphones, and computing systems."
+    },
+    "xyz:kr200": {
+      "category": "indices",
+      "description": "KR200 tracks a KRW-based, capitalization-weighted index of 200 large-cap South Korean companies, serving as the primary benchmark for the South Korean equity market. The oracle follows the index's native level without FX conversion."
+    },
+    "xyz:lly": {
+      "category": "stocks",
+      "description": "LLY tracks the value of 1 share of common stock in Eli Lilly and Company. Eli Lilly develops and manufactures pharmaceuticals, including treatments for diabetes, oncology, immunology, and other therapeutic areas."
+    },
+    "xyz:meta": {
+      "category": "stocks",
+      "description": "META tracks the value of 1 share of common stock in Meta Platforms, Inc. Meta operates social media and digital advertising platforms including Facebook, Instagram, and WhatsApp, and invests in virtual reality and metaverse technologies."
+    },
+    "xyz:msft": {
+      "category": "stocks",
+      "description": "MSFT tracks the value of 1 share of common stock in Microsoft Corporation. Microsoft develops software, cloud computing services, and hardware. Its products include Windows, Office, Azure cloud infrastructure, and enterprise software solutions."
+    },
+    "xyz:mstr": {
+      "category": "stocks",
+      "description": "MSTR tracks the value of 1 share of common stock in Strategy Inc (formerly MicroStrategy Incorporated). Strategy is a major corporate holder of Bitcoin as part of its treasury strategy."
+    },
+    "xyz:mu": {
+      "category": "stocks",
+      "description": "MU tracks the value of 1 share of common stock in Micron Technology, Inc. Micron manufactures DRAM and NAND flash memory for data centers, consumer electronics, and industrial systems."
+    },
+    "xyz:natgas": {
+      "category": "commodities",
+      "description": "NATGAS tracks the value of 1 MMBtu of Henry Hub natural gas. Henry Hub serves as the primary U.S. benchmark for natural gas pricing and is widely referenced in global energy markets."
+    },
+    "xyz:nflx": {
+      "category": "stocks",
+      "description": "NFLX tracks the value of 1 share of common stock in Netflix, Inc. Netflix operates a global subscription-based streaming service offering original and licensed film and television content."
+    },
+    "xyz:nvda": {
+      "category": "stocks",
+      "description": "NVDA tracks the value of 1 share of common stock in NVIDIA Corporation. NVIDIA designs graphics processing units (GPUs) and AI computing platforms. Its chips power gaming, data centers, artificial intelligence, and advanced computing applications worldwide."
+    },
+    "xyz:orcl": {
+      "category": "stocks",
+      "description": "ORCL tracks the value of 1 share of common stock in Oracle Corporation. Oracle provides enterprise software, cloud infrastructure, and database management systems."
+    },
+    "xyz:palladium": {
+      "category": "commodities",
+      "description": "PALLADIUM tracks the value of 1 troy ounce of palladium. Palladium is a precious metal primarily used in automotive catalytic converters and is a key input in emissions-control systems."
+    },
+    "xyz:platinum": {
+      "category": "commodities",
+      "description": "PLATINUM tracks the value of 1 troy ounce of platinum. Platinum is a precious metal with major demand from automotive catalysts, jewelry, and industrial applications."
+    },
+    "xyz:pltr": {
+      "category": "stocks",
+      "description": "PLTR tracks the value of 1 share of common stock in Palantir Technologies, Inc. Palantir develops data analytics and artificial intelligence software platforms used by governments and enterprises for large-scale data integration and analysis."
+    },
+    "xyz:rivn": {
+      "category": "stocks",
+      "description": "RIVN tracks the value of 1 share of common stock in Rivian Automotive, Inc. Rivian designs and manufactures electric adventure vehicles and commercial delivery vans."
+    },
+    "xyz:silver": {
+      "category": "commodities",
+      "description": "SILVER tracks the value of 1 troy ounce of silver. Silver is both a precious and industrial metal with demand across investment markets, electronics, solar energy, and jewelry."
+    },
+    "xyz:skhx": {
+      "category": "stocks",
+      "description": "SKHX tracks the value of 1 share of common stock in SK hynix Inc. The oracle converts the underlying Korean stock's KRW price to USD at the prevailing USD/KRW FX rate. SK hynix manufactures DRAM and NAND memory semiconductors used in data centers, AI hardware, mobile devices, and computing systems."
+    },
+    "xyz:smsn": {
+      "category": "stocks",
+      "description": "SMSN tracks the value of 1 share of common stock in Samsung Electronics Co., Ltd. The oracle converts the underlying Korean stock's KRW price to USD at the prevailing USD/KRW FX rate. Samsung is a global leader in semiconductors, consumer electronics, and display technology."
+    },
+    "xyz:sndk": {
+      "category": "stocks",
+      "description": "SNDK tracks the value of 1 share of common stock in Sandisk Corporation. Sandisk develops and manufactures flash memory storage solutions used in consumer electronics, enterprise systems, and data infrastructure."
+    },
+    "xyz:softbank": {
+      "category": "stocks",
+      "description": "SOFTBANK tracks the value of 1 share of common stock in SoftBank Group Corp. The oracle converts the underlying Japanese stock's JPY price to USD at the prevailing USD/JPY FX rate. SoftBank is a Japanese investment holding company with major stakes in technology, telecommunications, and global venture investing."
+    },
+    "xyz:tsla": {
+      "category": "stocks",
+      "description": "TSLA tracks the value of 1 share of common stock in Tesla, Inc. Tesla designs and manufactures electric vehicles, battery energy storage systems, and solar products. The company is a global leader in EV production and autonomous driving technology."
+    },
+    "xyz:tsm": {
+      "category": "stocks",
+      "description": "TSM tracks the value of 1 American depositary share of Taiwan Semiconductor Manufacturing Company (TSMC). TSMC is the world's largest dedicated semiconductor foundry, manufacturing advanced chips for global technology companies."
+    },
+    "xyz:urnm": {
+      "category": "stocks",
+      "description": "URNM tracks the value of 1 share of Sprott Uranium Miners ETF. The fund provides exposure to uranium mining companies and physical uranium holdings."
+    },
+    "xyz:usar": {
+      "category": "stocks",
+      "description": "USAR tracks the value of 1 share of common stock in USA Rare Earth, Inc. The company develops domestic rare earth supply chains for critical technologies and defense applications."
+    },
+    "xyz:xyz100": {
+      "category": "indices",
+      "description": "XYZ100 tracks a modified market-capitalization-weighted index of 100 of the largest, most actively-traded, non-financial companies that are listed on a U.S. stock exchange, serving as a benchmark for large-cap U.S. technology and growth equities."
+    }
+  }
+}

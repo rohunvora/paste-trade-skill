@@ -61,6 +61,11 @@ then run the tree below per thesis.
 ```
 SPARSE SOURCE
 │
+├─ Is this breaking news or new information?
+│  YES → Read `references/fast.md` and follow it.
+│    Returns to SKILL.md §10 Post when done.
+│  NO → Continue below.
+│
 ├─ What is the person actually saying?
 │  ├─ What are they NOT saying that it sounds like?
 │  └─ Translate into hypothesis.
@@ -79,6 +84,10 @@ SPARSE SOURCE
 │  discover.ts --query "<term>" per who entry        │
 │    Prefer reference_symbols matches for HIP-3.     │
 │    --catalog for full non-crypto HL listing.        │
+│  discover.ts --query "<event/catalyst keywords>"   │
+│    --platform polymarket                            │
+│    Always run this alongside HL discovery.          │
+│    Use the event noun, not the ticker.              │
 │  Web search: verify thesis, find catalysts          │
 │    Cite: { "text", "url", "origin": "research" }   │
 │  Check hl-universe.md for HL upgrades over ETFs    │
@@ -89,13 +98,16 @@ SPARSE SOURCE
 │  For each candidate:                                │
 │    Reasoning chain from belief to trade?             │
 │    Is there a better trade?                         │
+│  If PM contract found (>$50K vol) that prices the   │
+│    event/catalyst → add as separate thesis.          │
 │  If gaps → loop back to SEARCH ─────────────────────┘
-│  Then pick 1-2. No redundant routes.
+│  Then pick 1-3. No redundant routes.
 │
 ├─ PICK
-│  Prefer: HL perps > HL thematic > PM binary > shares > proxy
+│  Prefer: HL perps > HL thematic > shares > proxy
 │  ETF tickers: discover.ts --query "TICKER" for HL perp equivalent.
-│  PM skip: only when pure price conviction, no binary event.
+│  PM is additive: post alongside price trades, not instead of.
+│  PM skip: only when no relevant contract exists.
 │  Clearest reasoning chain from thesis to trade
 │  Upcoming catalyst
 │  Tightest link between source quote and instrument

@@ -6,8 +6,8 @@
  * that break shell quoting).
  *
  * Usage:
- *   bun run skill/scripts/post.ts '<JSON payload>'
- *   echo '<JSON>' | bun run skill/scripts/post.ts
+ *   bun run scripts/post.ts '<JSON payload>'
+ *   echo '<JSON>' | bun run scripts/post.ts
  */
 
 import { applyRunId, extractRunIdArg } from "./run-id";
@@ -25,7 +25,7 @@ if (!payload) {
   payload = await Bun.stdin.text();
 }
 if (!payload?.trim()) {
-  console.error("Usage: bun run skill/scripts/post.ts '<JSON payload>' (or pipe via stdin)");
+  console.error("Usage: bun run scripts/post.ts '<JSON payload>' (or pipe via stdin)");
   process.exit(1);
 }
 payload = payload.trim();
@@ -578,7 +578,7 @@ try {
     }, { runId });
 
     if (body.source_theses && Array.isArray(body.source_theses)) {
-      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run skill/scripts/finalize-source.ts ...");
+      console.error("[board] source_theses detected on trade POST. Finalize explicitly with bun run scripts/finalize-source.ts ...");
     }
   }
 } catch { /* streaming is optional */ }

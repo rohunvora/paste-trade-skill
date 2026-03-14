@@ -3,7 +3,7 @@
  * Returns the source_id and source_url for live processing.
  *
  * Usage:
- *   bun run skill/scripts/create-source.ts '<JSON payload>'
+ *   bun run scripts/create-source.ts '<JSON payload>'
  *
  * Payload: { url, title, platform, source_date, author_handle, source_images,
  *           word_count?, duration_seconds?, speakers_count? }
@@ -15,7 +15,7 @@
 
 const payload = process.argv[2];
 if (!payload) {
-  console.error("Usage: bun run skill/scripts/create-source.ts '<JSON payload>'");
+  console.error("Usage: bun run scripts/create-source.ts '<JSON payload>'");
   process.exit(1);
 }
 
@@ -34,8 +34,8 @@ if (resolved !== parsedPayload.source_date) {
   console.error(`[create-source] Resolved source_date "now" → ${resolved}`);
 }
 
-// run_id: passed through to the API so the backend's run ID stays in sync
-// with the wrapper's tracing ID.
+// run_id: passed through to the API so the backend can use it as the trade_run ID.
+// This keeps the wrapper's tracing ID and the backend's run ID in sync.
 const providedRunId = typeof parsedPayload.run_id === "string" ? parsedPayload.run_id.trim() : "";
 if (providedRunId && providedRunId.length > 64) {
   console.error(`[create-source] run_id too long (${providedRunId.length}). Max 64.`);
@@ -89,7 +89,7 @@ try {
   const cleaned = cleanupStaleContextFiles();
   if (cleaned > 0) console.error(`[create-source] Cleaned ${cleaned} stale context file(s)`);
 
-  // Use the backend's run_id (canonical).
+  // Use the backend's run_id (canonical, exists in trade_runs table).
   // Falls back to the wrapper's provided ID or a random UUID.
   const runId = result.run_id || providedRunId || crypto.randomUUID().slice(0, 12);
   writeStreamContext({

@@ -1,27 +1,19 @@
 import type { Liquidity } from "../../types";
+import annotationCache from "./annotation-cache.json" with { type: "json" };
+import {
+  HIP3_EQUIVALENT_ALIASES,
+  HIP3_MANUAL_PROFILES,
+  type Hip3AssetClass,
+  type Hip3ManualProfile,
+} from "./hip3-manual";
 
 const API = "https://api.hyperliquid.xyz/info";
-// Resolved lazily — Workers doesn't support new URL() with import.meta.url at module scope
-function getAnnotationCachePath(): string | null {
-  try {
-    return new URL("./annotation-cache.json", import.meta.url).pathname;
-  } catch {
-    return null; // Workers environment — no filesystem access
-  }
-}
 
 export const DEFAULT_ENABLED_DEXES = ["xyz", "vntl", "cash", "km", "flx", "hyna"] as const;
 
 const DEX_PRIORITY = ["default", "xyz", "cash", "km", "vntl", "flx", "hyna", "abcd"] as const;
 
-type AssetClass =
-  | "crypto"
-  | "equity"
-  | "index"
-  | "commodity"
-  | "fx"
-  | "private_valuation"
-  | "other";
+type AssetClass = Hip3AssetClass;
 
 type MatchKind = "exact" | "prefixed" | "alias" | "query";
 
@@ -31,6 +23,7 @@ interface HLMeta {
     szDecimals: number;
     maxLeverage: number;
     marginTableId?: number;
+    isDelisted?: boolean;
   }>;
 }
 
@@ -67,6 +60,9 @@ interface SemanticMetadata {
   theme_tags: string[];
   instrument_description?: string;
   pricing_note?: string;
+  reference_symbols?: string[];
+  search_aliases?: string[];
+  routing_note?: string;
 }
 
 const PRIVATE_VALUATION_BASES = new Set(["SPACEX", "OPENAI", "ANTHROPIC"]);
@@ -80,8 +76,6 @@ const INDEX_BASES = new Set([
   "DEFENSE",
   "ENERGY",
   "BIOTECH",
-  "GOLDJM",
-  "SILVERJM",
   "USA500",
   "US500",
   "USTECH",
@@ -90,12 +84,9 @@ const INDEX_BASES = new Set([
   "USENERGY",
   "SEMI",
   "GLDMINE",
-  "KR200",
-  "JP225",
   "EWJ",
   "EWY",
   "URNM",
-  "DXY",
 ]);
 const COMMODITY_BASES = new Set([
   "GOLD",
@@ -106,8 +97,8 @@ const COMMODITY_BASES = new Set([
   "OIL",
   "USOIL",
   "NATGAS",
+  "GAS",
   "COPPER",
-  "ALUMINIUM",
 ]);
 const FX_BASES = new Set(["EUR", "JPY"]);
 
@@ -123,8 +114,6 @@ const THEME_TAGS_BY_BASE: Record<string, string[]> = {
   MAG7: ["mega-cap-tech"],
   ROBOT: ["robotics", "automation"],
   BIOTECH: ["biotech", "healthcare"],
-  GOLDJM: ["gold", "miners"],
-  SILVERJM: ["silver", "miners"],
   XYZ100: ["us-tech-index"],
   USA500: ["us-large-cap-index"],
   US500: ["us-large-cap-index"],
@@ -139,7 +128,6 @@ const THEME_TAGS_BY_BASE: Record<string, string[]> = {
   USOIL: ["oil"],
   NATGAS: ["natural-gas"],
   COPPER: ["industrial-metals"],
-  ALUMINIUM: ["industrial-metals"],
   URNM: ["uranium"],
   USAR: ["rare-earths", "materials"],
   COIN: ["crypto-equity"],
@@ -168,12 +156,21 @@ const PRICING_NOTE_BY_BASE: Record<string, string> = {
 };
 
 const ASSET_CLASS_BY_PERP_CATEGORY: Record<string, AssetClass> = {
+  crypto: "crypto",
   stocks: "equity",
   indices: "index",
   commodities: "commodity",
   preipo: "private_valuation",
   fx: "fx",
 };
+
+/** Pre-computed search data, built once during universe assembly. */
+interface SearchCache {
+  aliases_lower: string[];
+  normalized_aliases: string[];
+  alias_tokens: string[];
+  references_upper: string[];
+}
 
 export interface HlInstrument {
   full_symbol: string;
@@ -196,7 +193,12 @@ export interface HlInstrument {
   theme_tags: string[];
   instrument_description?: string;
   pricing_note?: string;
+  reference_symbols?: string[];
+  search_aliases?: string[];
+  routing_note?: string;
   source_warnings?: string[];
+  /** @internal Pre-computed search data; not serialized to API responses. */
+  _search?: SearchCache;
 }
 
 export interface HlDexSummary {
@@ -241,11 +243,83 @@ export interface HlQueryResult extends HlResolution {
 interface BuildUniverseOptions {
   enabled_dexes?: string[];
   strict?: boolean;
+  /** Include delisted instruments (default false). */
+  include_delisted?: boolean;
 }
 
 interface AnnotationCacheFile {
   fetched_at?: string;
   annotations?: Record<string, HLPerpAnnotationRaw>;
+}
+interface AnnotationIndexes {
+  by_symbol: Map<string, HLPerpAnnotationRaw>;
+  by_base: Map<string, HLPerpAnnotationRaw>;
+}
+
+function normalizeAnnotationRecord(
+  annotation: HLPerpAnnotationRaw | null | undefined,
+): HLPerpAnnotationRaw | null {
+  if (!annotation || typeof annotation !== "object") return null;
+  const category = normalizePerpCategory(annotation.category);
+  const description =
+    typeof annotation.description === "string" && annotation.description.trim()
+      ? annotation.description.trim()
+      : undefined;
+  if (!category && !description) return null;
+  return {
+    ...(category ? { category } : {}),
+    ...(description ? { description } : {}),
+  };
+}
+
+function mergeAnnotationRecords(
+  existing: HLPerpAnnotationRaw | undefined,
+  incoming: HLPerpAnnotationRaw,
+): HLPerpAnnotationRaw {
+  const existingDescription = existing?.description?.trim() ?? "";
+  const incomingDescription = incoming.description?.trim() ?? "";
+  return {
+    category: existing?.category ?? incoming.category,
+    description:
+      incomingDescription.length > existingDescription.length
+        ? incoming.description
+        : existing?.description ?? incoming.description,
+  };
+}
+
+function buildAnnotationIndexes(cache: AnnotationCacheFile | null | undefined): AnnotationIndexes {
+  const bySymbol = new Map<string, HLPerpAnnotationRaw>();
+  const byBase = new Map<string, HLPerpAnnotationRaw>();
+
+  for (const [rawSymbol, rawAnnotation] of Object.entries(cache?.annotations ?? {})) {
+    const annotation = normalizeAnnotationRecord(rawAnnotation);
+    if (!annotation) continue;
+
+    const symbol = rawSymbol.trim().toLowerCase();
+    if (!symbol) continue;
+    bySymbol.set(symbol, annotation);
+
+    const { base } = splitSymbol(rawSymbol);
+    const baseKey = normalizeBaseSymbol(base);
+    if (!baseKey) continue;
+
+    const existing = byBase.get(baseKey);
+    byBase.set(
+      baseKey,
+      existing ? mergeAnnotationRecords(existing, annotation) : annotation,
+    );
+  }
+
+  return { by_symbol: bySymbol, by_base: byBase };
+}
+
+// Lazy-initialized to avoid computing Maps on every import (matters for Worker cold starts).
+let _annotationIndexes: AnnotationIndexes | null = null;
+function getAnnotationIndexes(): AnnotationIndexes {
+  if (!_annotationIndexes) {
+    _annotationIndexes = buildAnnotationIndexes(annotationCache as AnnotationCacheFile);
+  }
+  return _annotationIndexes;
 }
 
 function parseNumber(value: unknown): number | undefined {
@@ -305,11 +379,75 @@ function tokenizeQuery(query: string): string[] {
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .map((p) => p.trim())
-    .filter((p) => p.length >= 2);
+    .filter((p) => p.length >= 2 && !GENERIC_QUERY_TOKENS.has(p));
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+const GENERIC_ALIAS_TOKENS = new Set([
+  "broad",
+  "company",
+  "equities",
+  "equity",
+  "etf",
+  "exposure",
+  "index",
+  "market",
+  "private",
+  "sector",
+  "style",
+]);
+
+const GENERIC_QUERY_TOKENS = new Set([
+  "equities",
+  "equity",
+  "etf",
+  "exposure",
+  "index",
+  "market",
+  "markets",
+  "sector",
+  "stock",
+  "stocks",
+]);
+
+function mergeStringLists(...lists: Array<string[] | undefined>): string[] | undefined {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const list of lists) {
+    if (!list?.length) continue;
+    for (const item of list) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      const key = trimmed.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(trimmed);
+    }
+  }
+
+  return merged.length > 0 ? merged : undefined;
+}
+
+function getManualProfile(baseUpper: string): Hip3ManualProfile | undefined {
+  return HIP3_MANUAL_PROFILES[baseUpper];
+}
+
+function getStaticAnnotation(
+  fullSymbol: string,
+  baseUpper: string,
+): HLPerpAnnotationRaw | undefined {
+  const indexes = getAnnotationIndexes();
+  return indexes.by_symbol.get(fullSymbol.toLowerCase())
+    ?? indexes.by_base.get(baseUpper);
 }
 
 function inferSemanticMetadata(dex: string, baseSymbol: string): SemanticMetadata {
   const baseUpper = baseSymbol.toUpperCase();
+  const manual = getManualProfile(baseUpper);
 
   let assetClass: AssetClass = "other";
   if (dex === "default" || dex === "hyna") {
@@ -327,10 +465,13 @@ function inferSemanticMetadata(dex: string, baseSymbol: string): SemanticMetadat
   }
 
   return {
-    asset_class: assetClass,
-    theme_tags: THEME_TAGS_BY_BASE[baseUpper] ?? [],
-    instrument_description: DESCRIPTION_BY_BASE[baseUpper],
-    pricing_note: PRICING_NOTE_BY_BASE[baseUpper],
+    asset_class: manual?.asset_class ?? assetClass,
+    theme_tags: mergeStringLists(THEME_TAGS_BY_BASE[baseUpper], manual?.theme_tags) ?? [],
+    instrument_description: manual?.instrument_description ?? DESCRIPTION_BY_BASE[baseUpper],
+    pricing_note: manual?.pricing_note ?? PRICING_NOTE_BY_BASE[baseUpper],
+    reference_symbols: manual?.reference_symbols,
+    search_aliases: manual?.search_aliases,
+    routing_note: manual?.routing_note,
   };
 }
 
@@ -339,6 +480,7 @@ async function postInfo<T>(body: Record<string, unknown>): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`Hyperliquid API error: ${res.status} ${res.statusText}`);
@@ -377,52 +519,6 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-async function loadAnnotationDescriptionCache(warnings: string[]): Promise<Map<string, string>> {
-  const cachePath = getAnnotationCachePath();
-  if (!cachePath || typeof globalThis.Bun === "undefined") {
-    warnings.push("annotation-cache.json unavailable (non-Bun environment); using hardcoded instrument descriptions only.");
-    return new Map();
-  }
-  const cacheFile = Bun.file(cachePath);
-
-  try {
-    if (!(await cacheFile.exists())) {
-      warnings.push("annotation-cache.json missing; using hardcoded instrument descriptions only.");
-      return new Map();
-    }
-  } catch (error) {
-    warnings.push(
-      `annotation-cache.json lookup failed (${errorMessage(error)}); using hardcoded instrument descriptions only.`
-    );
-    return new Map();
-  }
-
-  try {
-    const parsed = await cacheFile.json() as AnnotationCacheFile;
-    if (!parsed || typeof parsed !== "object" || !parsed.annotations || typeof parsed.annotations !== "object") {
-      warnings.push("annotation-cache.json malformed; using hardcoded instrument descriptions only.");
-      return new Map();
-    }
-
-    const descriptions = new Map<string, string>();
-    for (const [symbol, annotation] of Object.entries(parsed.annotations)) {
-      if (!annotation || typeof annotation !== "object") continue;
-      const description =
-        typeof annotation.description === "string" && annotation.description.trim()
-          ? annotation.description.trim()
-          : "";
-      if (!description) continue;
-      descriptions.set(symbol.toLowerCase(), description);
-    }
-    return descriptions;
-  } catch (error) {
-    warnings.push(
-      `annotation-cache.json parse failed (${errorMessage(error)}); using hardcoded instrument descriptions only.`
-    );
-    return new Map();
-  }
-}
-
 function normalizePerpCategory(category: unknown): string | undefined {
   if (typeof category !== "string") return undefined;
   const normalized = category.trim().toLowerCase();
@@ -457,7 +553,6 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
   const requestedDexes = ["default", ...enabledDexes];
   const failedDexes: HlUniverseBuildFailure[] = [];
   const warnings: string[] = [];
-  const annotationDescriptionsBySymbol = await loadAnnotationDescriptionCache(warnings);
 
   let perpDexsAvailable = false;
   let dexMeta = new Map<string, HLPerpDexRaw>();
@@ -533,6 +628,7 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
       const info = meta.universe[idx];
       const ctx = ctxs[idx];
       if (!info || !ctx) continue;
+      if (info.isDelisted && !options.include_delisted) continue;
 
       const name = info.name;
       const { dex: symbolDex, base } = splitSymbol(name);
@@ -552,11 +648,12 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
 
       const semantic = inferSemanticMetadata(actualDex, base);
       const perpCategory = resolvePerpCategory(perpCategoriesBySymbol, name, actualDex, base);
+      const staticAnnotation = getStaticAnnotation(name, base.toUpperCase());
+      const resolvedCategory = perpCategory ?? staticAnnotation?.category;
       const categoryAssetClass =
-        perpCategory && Object.prototype.hasOwnProperty.call(ASSET_CLASS_BY_PERP_CATEGORY, perpCategory)
-          ? ASSET_CLASS_BY_PERP_CATEGORY[perpCategory]
+        resolvedCategory && Object.prototype.hasOwnProperty.call(ASSET_CLASS_BY_PERP_CATEGORY, resolvedCategory)
+          ? ASSET_CLASS_BY_PERP_CATEGORY[resolvedCategory]
           : undefined;
-      const cachedDescription = annotationDescriptionsBySymbol.get(name.toLowerCase());
       const sourceWarnings: string[] = [];
       if (actualDex === "cash" && base.toUpperCase() === "USA500") {
         sourceWarnings.push("Some dreamcash docs use US500-USDT naming; live executable symbol is cash:USA500.");
@@ -581,11 +678,26 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
         funding_interest_rate: fundingRate.get(name),
         asset_class: categoryAssetClass ?? semantic.asset_class,
         theme_tags: semantic.theme_tags,
-        instrument_description: semantic.instrument_description ?? cachedDescription,
+        // Manual profile wins over stale bundled annotation; annotation is fallback.
+        instrument_description: semantic.instrument_description ?? staticAnnotation?.description ?? undefined,
         pricing_note: semantic.pricing_note,
+        reference_symbols: semantic.reference_symbols,
+        search_aliases: semantic.search_aliases,
+        routing_note: semantic.routing_note,
         source_warnings: sourceWarnings.length ? sourceWarnings : undefined,
       });
     }
+  }
+
+  // Pre-compute search data for all instruments.
+  for (const inst of instruments) {
+    const aliases = (inst.search_aliases ?? []).map((a) => a.toLowerCase());
+    inst._search = {
+      aliases_lower: aliases,
+      normalized_aliases: aliases.map(normalizeSearchText),
+      alias_tokens: aliases.flatMap(tokenizeQuery),
+      references_upper: (inst.reference_symbols ?? []).map((s) => s.toUpperCase()),
+    };
   }
 
   if (strict && failedDexes.length > 0) {
@@ -673,6 +785,19 @@ export function resolveTicker(
   const base = normalizeBaseSymbol(cleaned);
   const baseKeyUpper = base.toUpperCase();
 
+  // Common ETF / benchmark aliases mapped to their HIP-3 equivalents.
+  const equivalentBase = HIP3_EQUIVALENT_ALIASES[baseKeyUpper];
+  if (equivalentBase && equivalentBase !== baseKeyUpper) {
+    const mapped = resolveTicker(equivalentBase, universe, opts);
+    if (mapped) {
+      return {
+        ...mapped,
+        match_kind: "alias",
+        selection_reason: `Alias ${baseKeyUpper} mapped to HL equivalent ${equivalentBase}.`,
+      };
+    }
+  }
+
   // Keep legacy behavior for default-listed assets.
   const defaultExact = universe.by_full_lower.get(base.toLowerCase());
   if (defaultExact && defaultExact.dex === "default") {
@@ -739,15 +864,42 @@ export function resolveTicker(
   return null;
 }
 
-function scoreInstrumentForQuery(inst: HlInstrument, tokens: string[]): { score: number; reasons: string[] } {
+function scoreInstrumentForQuery(
+  inst: HlInstrument,
+  queryLower: string,
+  normalizedQuery: string,
+  tokens: string[],
+): { score: number; reasons: string[] } {
   const fullLower = inst.full_symbol.toLowerCase();
   const baseUpper = inst.base_symbol.toUpperCase();
   const desc = (inst.instrument_description ?? "").toLowerCase();
   const tags = inst.theme_tags.map((t) => t.toLowerCase());
+  // Use pre-computed search data (built during universe assembly).
+  const search = inst._search;
+  const aliases = search?.aliases_lower ?? [];
+  const normalizedAliases = search?.normalized_aliases ?? [];
+  const aliasTokens = search?.alias_tokens ?? [];
+  const references = search?.references_upper ?? [];
 
   let score = 0;
   let hasSemanticHit = false;
   const reasons: string[] = [];
+
+  for (let i = 0; i < aliases.length; i++) {
+    const alias = aliases[i]!;
+    const normalizedAlias = normalizedAliases[i]!;
+    if (alias && queryLower.includes(alias)) {
+      score += 5;
+      hasSemanticHit = true;
+      reasons.push(`alias ${alias}`);
+      continue;
+    }
+    if (normalizedAlias && normalizedQuery.includes(normalizedAlias)) {
+      score += 5;
+      hasSemanticHit = true;
+      reasons.push(`alias ${alias}`);
+    }
+  }
 
   for (const token of tokens) {
     const tokenUpper = token.toUpperCase();
@@ -776,6 +928,20 @@ function scoreInstrumentForQuery(inst: HlInstrument, tokens: string[]): { score:
       hasSemanticHit = true;
       reasons.push(`asset class ${inst.asset_class}`);
     }
+    if (references.some((reference) => reference === tokenUpper)) {
+      score += 5;
+      hasSemanticHit = true;
+      reasons.push(`reference ${tokenUpper}`);
+    }
+    if (
+      token.length >= 4
+      && !GENERIC_ALIAS_TOKENS.has(token)
+      && aliasTokens.some((aliasToken) => aliasToken === token)
+    ) {
+      score += 3;
+      hasSemanticHit = true;
+      reasons.push(`alias ${token}`);
+    }
     if (tags.some((tag) => tag.includes(token))) {
       score += 3;
       hasSemanticHit = true;
@@ -797,9 +963,11 @@ function scoreInstrumentForQuery(inst: HlInstrument, tokens: string[]): { score:
 
 export function searchInstruments(universe: HlUniverse, query: string, limit = 5): HlQueryResult[] {
   const tokens = tokenizeQuery(query);
+  const queryLower = query.toLowerCase();
+  const normalizedQuery = normalizeSearchText(query);
   const ranked = universe.instruments
     .map((inst) => {
-      const { score, reasons } = scoreInstrumentForQuery(inst, tokens);
+      const { score, reasons } = scoreInstrumentForQuery(inst, queryLower, normalizedQuery, tokens);
       return {
         instrument: inst,
         score,
