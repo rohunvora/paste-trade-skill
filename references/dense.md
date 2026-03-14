@@ -63,8 +63,6 @@ called out, or contrarian positions they argued against.
 - Use surrounding transcript context to sharpen.
 - Use web search if needed to clarify what's tradeable.
 
-Think across instrument types. "Fed will cut rates" → Polymarket FOMC contract, or USBOND on Hyperliquid, not just TLT.
-
 **Save all theses in one batch:**
 
 ```bash
@@ -156,6 +154,7 @@ Run all three in parallel for each thesis:
    For HIP-3/non-crypto results, prefer entries whose `reference_symbols` and
    `routing_note` show the same ETF, benchmark, commodity, or private company
    the thesis is really about.
+   If discover returns irrelevant results, ignore them.
 
 2. **Source context** (`scripts/source-excerpt.ts --run-id <run_id> --thesis-id <thesis_id> --file <saved_to> --query "<thesis keywords>"`):
    retrieve surrounding context from the original source for this thesis.
@@ -200,7 +199,7 @@ The trade ideas in `who` are starting context, not decisions. Routing may confir
   (not when author named a specific company; their thesis is the company, not the sector)
 - Thesis contingent on a binary event with a Polymarket contract → prediction market
   Compare the `resolution` field from discover results against the thesis.
-  (skip only when thesis is pure price conviction — no underlying yes/no question, no catalyst date)
+  (skip Polymarket unless there's an underlying yes/no question or catalyst date)
 - Otherwise direct thesis subject via shares
 - If no direct executable route, use best proxy
 - Sector-level instruments over single equities for broad theses

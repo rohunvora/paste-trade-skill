@@ -176,11 +176,7 @@ Both paths use the thesis schema and save commands below.
 
 A thesis is one belief. If the same belief could be traded through different instruments, those are `who` entries, not separate theses.
 
-Think across instrument types when ideating. A thesis about "the Fed will cut
-rates" maps to a Polymarket contract on the FOMC decision, not just a bond ETF.
-A thesis about "nuclear energy will boom" maps to an HL NUCLEAR index perp,
-not just individual uranium stocks. Include the most direct expression of the
-thesis alongside any specific ticker names.
+Include the most direct expression of the thesis alongside any specific ticker names.
 
 For unresolved candidates, do not drop them. Save them as:
 
