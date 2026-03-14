@@ -30,35 +30,13 @@ Supporting docs: `references/` (skill index, ASCII map, CLI cheatsheet, routing 
 
 ## 2 - Chat UX
 
-The source page is the primary interface. Chat is for links and brief status only.
-
-### Message discipline (hard rule)
-
-Maximum 3 user-visible chat messages per /trade run:
-
-| # | When | Content |
-|---|---|---|
-| 1 | Before first tool call | Optional brief status: `Running /trade now. I will send a live link shortly.` |
-| 2 | After create-source returns | `Watch live: {source_url}` |
-| 3 | After all trades posted | Compact summary (see §12) |
-
-If your runtime already sent message 1 for you, do not repeat it.
-
-For transcript sources, message 1 may add: `Longer videos can take a few minutes.`
-
-### Mandatory continuation after source creation
-
-After running `create-source.ts`, you MUST:
-1. Send the canonical Watch live link immediately unless your runtime will deliver it for you.
-2. Continue the pipeline right away in the same run.
-3. Never treat the Watch live link as the end of the `/trade` run.
-4. Never wait for user input before continuing.
-
-The user should receive the link within seconds of source creation, not minutes later bundled with trade results, but the run must still continue through extraction, routing, posting, and finalization.
-
-### What stays off chat
-
-All narration, progress updates, and trade explanations go to the source page (via status events and trade posts). Do not narrate pipeline steps in chat. Do not send per-trade summaries. Do not send messages like "Now let me think through the theses" or "Posting trade: X".
+- Keep chat updates operational and brief.
+- First status line should set expectation: `Running /trade now. I will send a live link shortly.`
+- For transcript sources, next status line should set duration expectation: `On it. Pulling transcript now. Longer videos can take a few minutes.`
+- After `create-source.ts`, send `Watch live: {source_url}` immediately unless your runtime already delivers it.
+- Continue the pipeline after the live link. Never treat the live link as the end of the `/trade` run.
+- Do not wait for user input before continuing.
+- If your runtime surfaces progress in chat, send updates when the state changes. Do not hold them and dump them at the end.
 
 ## Preflight
 
@@ -509,18 +487,13 @@ Useful optional `trade_data` fields:
 
 ## 12 - Reply
 
-Final chat message (message 3 of 3). Keep it compact -- full details are on the source page.
+When done, reply in one block.
 
-1-2 trades:
+- why the trade makes sense
+- author's words -> thesis -> instrument
+- 2-3 sentences
 
-```text
-[N] trades from your thesis:
-"headline quote" -> TICKER direction ($price) · "headline quote" -> TICKER direction ($price)
-
-Expressions, not advice.
-```
-
-3+ trades:
+When 3+ trades come from one source, open with 1-2 sentences framing the portfolio logic, then map them:
 
 ```text
 [N] trades from @[handle]'s [source type]:
@@ -529,12 +502,13 @@ Expressions, not advice.
 "headline quote" -> TICKER direction
 ...
 
-Expressions, not advice.
+-> Reply to dig deeper
 ```
 
-Do not repeat explanations, derivations, or reasoning. Those are on the source page.
-Do not include trade card URLs (paste.trade/t/...) -- they are linked from the live board.
 If both direct and derived trades exist, show direct first.
+
+Do not include trade card URLs (paste.trade/t/...) in the reply — they are already linked from the live board. Only include the live board URL (paste.trade/s/...) if it hasn't been shared yet.
+
 If posting fails: `Board unavailable. Skipping post.`
 
 ## 13 - Hard Rules

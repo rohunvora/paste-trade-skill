@@ -5,6 +5,21 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - install commands use the bare repo path (no version tag)
 
+## [1.2.4] - 2026-03-13
+
+Shared chat contract rollback after wrapper overreach.
+
+### Fixed
+
+- `SKILL.md` — removes wrapper-era chat suppression from the shared skill body; direct clients can be thoughtful again instead of being forced into a cold scoreboard-style final reply
+- `SKILL.md` — drops the "source page is the primary interface", fixed 3-message cap, and "keep all reasoning off chat" rules from the common prompt
+- `SKILL.md` — keeps only the durable cross-runtime contract: send the live link immediately, continue the run after the link, and never batch delayed progress into one dump at the end
+
+### Changed
+
+- Direct `/trade` runs in Claude Code, Codex, and terminal should feel closer to the pre-wrapper behavior again: fast live link, then normal reasoning and final explanation
+- OpenClaw still uses the wrapper for delivery control, but the base skill no longer teaches every runtime to be terse and silent
+
 ## [1.2.3] - 2026-03-13
 
 Prompt-boundary cleanup for direct clients and the OpenClaw wrapper.
