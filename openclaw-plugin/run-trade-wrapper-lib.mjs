@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFile, spawnSync } from "node:child_process";
@@ -10,6 +10,7 @@ export const MAX_SESSION_KEY_CHARS = 512;
 export const MAX_IDEMPOTENCY_KEY_CHARS = 256;
 export const MAX_TARGET_CHARS = 256;
 export const MAX_RUN_ID_CHARS = 64;
+export const MAX_LANE_VERSION = 1_000_000;
 export const MAX_MESSAGE_CHARS = 24_000;
 export const MAX_EXTRA_SYSTEM_PROMPT_CHARS = 24_000;
 export const MAX_AUDIT_STRING_CHARS = 400;
@@ -21,6 +22,9 @@ export const GATEWAY_CALL_RETRY_DELAY_MS = 1_200;
 // Long-form sources can take several minutes once routing and posting begin.
 export const AGENT_WAIT_TIMEOUT_MS = 900_000;
 export const SESSION_LOOKUP_TIMEOUT_MS = 10_000;
+export const SESSION_LOOKUP_LIMIT = 80;
+export const SESSION_LOOKUP_MAX_BUFFER_BYTES = 1024 * 1024;
+export const FINAL_MESSAGE_LOOKUP_LIMIT = 24;
 export const DIRECT_SEND_TIMEOUT_MS = 15_000;
 export const LIVE_LINK_POLL_INTERVAL_MS = 750;
 export const LIVE_LINK_WAIT_TIMEOUT_MS = 90_000;
@@ -64,9 +68,43 @@ function resolveRuntimeDataDirPath() {
 }
 
 export const DEFAULT_STREAM_CONTEXT_DIR_PATH = resolveRuntimeDataDirPath();
+export const DEFAULT_LANE_STATE_DIR_PATH = path.join(
+  os.homedir(),
+  ".openclaw",
+  "state",
+  "trade-slash-wrapper",
+  "lanes",
+);
+export const LANE_STATE_LOCK_TIMEOUT_MS = 5_000;
+export const LANE_STATE_LOCK_RETRY_MS = 25;
+export const LANE_STATE_LOCK_STALE_MS = 15_000;
+export const STALE_LANE_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 
 export function hashForAudit(value) {
   return createHash("sha256").update(value, "utf8").digest("hex").slice(0, 16);
+}
+
+function hashForState(value) {
+  return createHash("sha256").update(value, "utf8").digest("hex").slice(0, 32);
+}
+
+function normalizeLaneVersion(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 1;
+  }
+  return Math.min(MAX_LANE_VERSION, Math.max(1, Math.floor(parsed)));
+}
+
+export function tradeWorkerLaneStateFilePath(
+  sessionKey,
+  laneStateDirPath = DEFAULT_LANE_STATE_DIR_PATH,
+) {
+  return path.join(laneStateDirPath, `${hashForState(sessionKey)}.json`);
+}
+
+function tradeWorkerLaneLockPath(sessionKey, laneStateDirPath = DEFAULT_LANE_STATE_DIR_PATH) {
+  return path.join(laneStateDirPath, `${hashForState(sessionKey)}.lock`);
 }
 
 export function sanitizeAuditString(value) {
@@ -102,6 +140,263 @@ function sleepAsync(ms) {
     return Promise.resolve();
   }
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseLaneRunTimestampMs(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const timestampMs = Date.parse(value);
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+function loadTradeWorkerLaneState(sessionKey, opts = {}) {
+  const laneStateDirPath = opts.laneStateDirPath ?? DEFAULT_LANE_STATE_DIR_PATH;
+  const statePath = tradeWorkerLaneStateFilePath(sessionKey, laneStateDirPath);
+  const defaultState = {
+    sessionKeyHash: hashForAudit(sessionKey),
+    laneVersion: 1,
+    openRuns: [],
+    updatedAt: null,
+  };
+
+  if (!existsSync(statePath)) {
+    return {
+      statePath,
+      hadExistingFile: false,
+      rawOpenRunCount: 0,
+      staleRunCount: 0,
+      state: defaultState,
+    };
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(statePath, "utf8"));
+  } catch {
+    return {
+      statePath,
+      hadExistingFile: true,
+      rawOpenRunCount: 0,
+      staleRunCount: 0,
+      state: defaultState,
+    };
+  }
+
+  const rawOpenRuns = Array.isArray(parsed?.openRuns) ? parsed.openRuns : [];
+  const nowMs = Date.now();
+  const staleRunTtlMs =
+    Number.isFinite(opts.staleLaneRunTtlMs) && opts.staleLaneRunTtlMs > 0
+      ? Math.floor(opts.staleLaneRunTtlMs)
+      : STALE_LANE_RUN_TTL_MS;
+  const openRuns = [];
+
+  for (const rawRun of rawOpenRuns) {
+    const runId = typeof rawRun?.runId === "string" ? rawRun.runId.trim() : "";
+    if (!runId) {
+      continue;
+    }
+    const registeredAt =
+      typeof rawRun?.registeredAt === "string" && rawRun.registeredAt.trim()
+        ? rawRun.registeredAt.trim()
+        : null;
+    const registeredAtMs = parseLaneRunTimestampMs(registeredAt);
+    if (!registeredAtMs || nowMs - registeredAtMs > staleRunTtlMs) {
+      continue;
+    }
+    openRuns.push({ runId, registeredAt });
+  }
+
+  return {
+    statePath,
+    hadExistingFile: true,
+    rawOpenRunCount: rawOpenRuns.length,
+    staleRunCount: Math.max(0, rawOpenRuns.length - openRuns.length),
+    state: {
+      sessionKeyHash:
+        typeof parsed?.sessionKeyHash === "string" && parsed.sessionKeyHash.trim()
+          ? parsed.sessionKeyHash.trim()
+          : hashForAudit(sessionKey),
+      laneVersion: normalizeLaneVersion(parsed?.laneVersion),
+      openRuns,
+      updatedAt:
+        typeof parsed?.updatedAt === "string" && parsed.updatedAt.trim()
+          ? parsed.updatedAt.trim()
+          : null,
+    },
+  };
+}
+
+function persistTradeWorkerLaneState(sessionKey, state, opts = {}) {
+  const laneStateDirPath = opts.laneStateDirPath ?? DEFAULT_LANE_STATE_DIR_PATH;
+  const statePath = tradeWorkerLaneStateFilePath(sessionKey, laneStateDirPath);
+  const normalizedOpenRuns = Array.isArray(state?.openRuns)
+    ? state.openRuns
+        .map((entry) => ({
+          runId: typeof entry?.runId === "string" ? entry.runId.trim() : "",
+          registeredAt:
+            typeof entry?.registeredAt === "string" && entry.registeredAt.trim()
+              ? entry.registeredAt.trim()
+              : new Date().toISOString(),
+        }))
+        .filter((entry) => entry.runId)
+    : [];
+
+  mkdirSync(path.dirname(statePath), { recursive: true });
+  writeFileSync(
+    statePath,
+    JSON.stringify(
+      {
+        sessionKeyHash: hashForAudit(sessionKey),
+        laneVersion: normalizeLaneVersion(state?.laneVersion),
+        openRuns: normalizedOpenRuns,
+        updatedAt:
+          typeof state?.updatedAt === "string" && state.updatedAt.trim()
+            ? state.updatedAt.trim()
+            : new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    { encoding: "utf8", mode: 0o600 },
+  );
+}
+
+function withTradeWorkerLaneLock(sessionKey, opts, fn) {
+  const laneStateDirPath = opts?.laneStateDirPath ?? DEFAULT_LANE_STATE_DIR_PATH;
+  const lockPath = tradeWorkerLaneLockPath(sessionKey, laneStateDirPath);
+  const timeoutMs =
+    Number.isFinite(opts?.laneLockTimeoutMs) && opts.laneLockTimeoutMs > 0
+      ? Math.floor(opts.laneLockTimeoutMs)
+      : LANE_STATE_LOCK_TIMEOUT_MS;
+  const retryMs =
+    Number.isFinite(opts?.laneLockRetryMs) && opts.laneLockRetryMs > 0
+      ? Math.floor(opts.laneLockRetryMs)
+      : LANE_STATE_LOCK_RETRY_MS;
+  const staleMs =
+    Number.isFinite(opts?.laneLockStaleMs) && opts.laneLockStaleMs > 0
+      ? Math.floor(opts.laneLockStaleMs)
+      : LANE_STATE_LOCK_STALE_MS;
+  const deadlineMs = Date.now() + timeoutMs;
+
+  mkdirSync(laneStateDirPath, { recursive: true });
+
+  while (true) {
+    try {
+      mkdirSync(lockPath);
+      break;
+    } catch (error) {
+      if (!error || error.code !== "EEXIST") {
+        throw error;
+      }
+
+      try {
+        const stats = statSync(lockPath);
+        if (Number.isFinite(stats.mtimeMs) && Date.now() - stats.mtimeMs > staleMs) {
+          rmSync(lockPath, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        // Best effort stale-lock cleanup only.
+      }
+
+      if (Date.now() >= deadlineMs) {
+        throw new Error("trade worker lane lock timeout");
+      }
+      sleepMs(retryMs);
+    }
+  }
+
+  try {
+    return fn();
+  } finally {
+    rmSync(lockPath, { recursive: true, force: true });
+  }
+}
+
+export function registerTradeWorkerRun(sessionKey, runId, opts = {}) {
+  const normalizedSessionKey = typeof sessionKey === "string" ? sessionKey.trim() : "";
+  const normalizedRunId = typeof runId === "string" ? runId.trim() : "";
+  if (!normalizedSessionKey) {
+    throw new Error("sessionKey is required");
+  }
+  if (!normalizedRunId) {
+    throw new Error("runId is required");
+  }
+
+  return withTradeWorkerLaneLock(normalizedSessionKey, opts, () => {
+    const loaded = loadTradeWorkerLaneState(normalizedSessionKey, opts);
+    const state = loaded.state;
+    if (loaded.rawOpenRunCount > 0 && state.openRuns.length === 0) {
+      state.laneVersion = normalizeLaneVersion(state.laneVersion + 1);
+    }
+
+    const existingIndex = state.openRuns.findIndex((entry) => entry.runId === normalizedRunId);
+    const aheadCount = existingIndex >= 0 ? existingIndex : state.openRuns.length;
+    if (existingIndex === -1) {
+      state.openRuns.push({
+        runId: normalizedRunId,
+        registeredAt: new Date().toISOString(),
+      });
+    }
+    state.updatedAt = new Date().toISOString();
+    persistTradeWorkerLaneState(normalizedSessionKey, state, opts);
+    return {
+      laneVersion: state.laneVersion,
+      aheadCount,
+      queued: aheadCount > 0,
+      openRunCount: state.openRuns.length,
+      staleRunCount: loaded.staleRunCount,
+    };
+  });
+}
+
+export function completeTradeWorkerRun(sessionKey, runId, opts = {}) {
+  const normalizedSessionKey = typeof sessionKey === "string" ? sessionKey.trim() : "";
+  const normalizedRunId = typeof runId === "string" ? runId.trim() : "";
+  if (!normalizedSessionKey || !normalizedRunId) {
+    return {
+      removed: false,
+      rotated: false,
+      remainingCount: 0,
+      laneVersion: 1,
+      staleRunCount: 0,
+    };
+  }
+
+  const statePath = tradeWorkerLaneStateFilePath(normalizedSessionKey, opts.laneStateDirPath);
+  if (!existsSync(statePath)) {
+    return {
+      removed: false,
+      rotated: false,
+      remainingCount: 0,
+      laneVersion: 1,
+      staleRunCount: 0,
+    };
+  }
+
+  return withTradeWorkerLaneLock(normalizedSessionKey, opts, () => {
+    const loaded = loadTradeWorkerLaneState(normalizedSessionKey, opts);
+    const state = loaded.state;
+    const openRunCountBefore = state.openRuns.length;
+    state.openRuns = state.openRuns.filter((entry) => entry.runId !== normalizedRunId);
+    const removed = state.openRuns.length !== openRunCountBefore;
+    const hadAnyOpenRuns = openRunCountBefore > 0 || loaded.rawOpenRunCount > 0;
+    let rotated = false;
+    if (hadAnyOpenRuns && state.openRuns.length === 0) {
+      state.laneVersion = normalizeLaneVersion(state.laneVersion + 1);
+      rotated = true;
+    }
+    state.updatedAt = new Date().toISOString();
+    persistTradeWorkerLaneState(normalizedSessionKey, state, opts);
+    return {
+      removed,
+      rotated,
+      remainingCount: state.openRuns.length,
+      laneVersion: state.laneVersion,
+      staleRunCount: loaded.staleRunCount,
+    };
+  });
 }
 
 function runExecFile(cmd, args, options, execFileImpl = execFile) {
@@ -197,6 +492,10 @@ export function parseWrapperPayload(rawArg) {
     parsed.runId === undefined || parsed.runId === null
       ? null
       : assertBoundedString(parsed.runId, "runId", MAX_RUN_ID_CHARS);
+  const laneVersion =
+    parsed.laneVersion === undefined || parsed.laneVersion === null
+      ? null
+      : normalizeLaneVersion(parsed.laneVersion);
   const message = assertBoundedString(parsed.message, "message", MAX_MESSAGE_CHARS);
   const extraSystemPrompt =
     parsed.extraSystemPrompt === undefined || parsed.extraSystemPrompt === null
@@ -207,7 +506,7 @@ export function parseWrapperPayload(rawArg) {
           MAX_EXTRA_SYSTEM_PROMPT_CHARS,
         );
 
-  return { sessionKey, idempotencyKey, target, runId, message, extraSystemPrompt };
+  return { sessionKey, idempotencyKey, target, runId, laneVersion, message, extraSystemPrompt };
 }
 
 export function deriveMessageChannelFromSessionKey(sessionKey) {
@@ -277,18 +576,17 @@ export function deriveAgentSessionNamespace(sessionKey) {
   };
 }
 
-export function buildTradeSessionKey(sessionKey, runSuffix) {
+export function buildTradeSessionKey(sessionKey, laneVersion) {
   const { agentId, sessionChannel } = deriveAgentSessionNamespace(sessionKey);
-  return `agent:${agentId}:${sessionChannel}:trade:${runSuffix}`;
+  return `agent:${agentId}:${sessionChannel}:trade-worker:${normalizeLaneVersion(laneVersion)}`;
 }
 
 export function buildAgentCallParams(payload) {
-  // Use a fresh per-run session key so the agent starts with an empty conversation.
-  // Without this, the trade prompt enters the user's existing conversation where
-  // prior messages (status checks, debugging) cause the model to respond
-  // conversationally instead of executing the skill.
-  const runSuffix = payload.runId || payload.idempotencyKey;
-  const tradeSessionKey = buildTradeSessionKey(payload.sessionKey, runSuffix);
+  // Reuse one hidden worker lane per chat so OpenClaw can serialize /trade runs
+  // natively for that chat while still keeping the worker isolated from the
+  // user's visible conversation.
+  const laneVersion = normalizeLaneVersion(payload.laneVersion);
+  const tradeSessionKey = buildTradeSessionKey(payload.sessionKey, laneVersion);
 
   const params = {
     sessionKey: tradeSessionKey,
@@ -327,6 +625,7 @@ function summarizePayloadForAudit(payload) {
     targetHash: payload.target ? hashForAudit(payload.target) : null,
     idempotencyKeyHash: hashForAudit(payload.idempotencyKey),
     runIdHash: payload.runId ? hashForAudit(payload.runId) : null,
+    laneVersion: normalizeLaneVersion(payload.laneVersion),
     messageHash: hashForAudit(payload.message),
     messageLength: payload.message.length,
     extraSystemPromptHash: payload.extraSystemPrompt ? hashForAudit(payload.extraSystemPrompt) : null,
@@ -380,10 +679,17 @@ function summarizeRuntimeEvents(events) {
   };
 }
 
-function fetchSessionMessages(sessionKey, spawnSyncImpl) {
+function fetchSessionMessages(sessionKey, spawnSyncImpl, opts = {}) {
   if (typeof sessionKey !== "string" || !sessionKey.trim()) {
     return { ok: false, reason: "missing_session_key", messages: [] };
   }
+
+  const limit =
+    Number.isFinite(opts.limit) && opts.limit > 0 ? Math.floor(opts.limit) : SESSION_LOOKUP_LIMIT;
+  const maxBufferBytes =
+    Number.isFinite(opts.maxBufferBytes) && opts.maxBufferBytes > 0
+      ? Math.floor(opts.maxBufferBytes)
+      : SESSION_LOOKUP_MAX_BUFFER_BYTES;
 
   const result = spawnSyncImpl(
     "openclaw",
@@ -397,13 +703,13 @@ function fetchSessionMessages(sessionKey, spawnSyncImpl) {
       "--params",
       JSON.stringify({
         key: sessionKey,
-        limit: 80,
+        limit,
       }),
     ],
     {
       stdio: "pipe",
       encoding: "utf8",
-      maxBuffer: 128 * 1024,
+      maxBuffer: maxBufferBytes,
       timeout: SESSION_LOOKUP_TIMEOUT_MS + 5_000,
       shell: false,
       windowsHide: true,
@@ -500,8 +806,18 @@ function hasAssistantToolCall(content) {
   );
 }
 
-function readFinalAssistantMessage(sessionKey, spawnSyncImpl) {
-  const sessionLookup = fetchSessionMessages(sessionKey, spawnSyncImpl);
+function readFinalAssistantMessage(sessionKey, spawnSyncImpl, opts = {}) {
+  const sessionLookup = fetchSessionMessages(sessionKey, spawnSyncImpl, {
+    limit:
+      Number.isFinite(opts.finalMessageSessionLookupLimit) && opts.finalMessageSessionLookupLimit > 0
+        ? Math.floor(opts.finalMessageSessionLookupLimit)
+        : FINAL_MESSAGE_LOOKUP_LIMIT,
+    maxBufferBytes:
+      Number.isFinite(opts.finalMessageSessionLookupMaxBufferBytes) &&
+      opts.finalMessageSessionLookupMaxBufferBytes > 0
+        ? Math.floor(opts.finalMessageSessionLookupMaxBufferBytes)
+        : SESSION_LOOKUP_MAX_BUFFER_BYTES,
+  });
   if (!sessionLookup.ok) {
     return {
       ok: false,
@@ -762,10 +1078,7 @@ export async function runWrapper(rawArg, opts = {}) {
     handoffMessageLength: payload.message.length,
     handoffExtraSystemPromptLength: payload.extraSystemPrompt?.length ?? 0,
   };
-  const tradeSessionKey = buildTradeSessionKey(
-    payload.sessionKey,
-    payload.runId || payload.idempotencyKey,
-  );
+  const tradeSessionKey = buildTradeSessionKey(payload.sessionKey, payload.laneVersion);
   let params;
   try {
     params = buildAgentCallParams(payload);
@@ -782,334 +1095,415 @@ export async function runWrapper(rawArg, opts = {}) {
     return 1;
   }
 
-  let result = null;
-  for (let attempt = 1; attempt <= GATEWAY_CALL_MAX_ATTEMPTS; attempt++) {
-    result = spawnSyncImpl(
-      "openclaw",
-      [
-        "gateway",
-        "call",
-        "agent",
-        "--json",
-        "--timeout",
-        String(GATEWAY_CALL_TIMEOUT_MS),
-        "--params",
-        params,
-      ],
-      {
-        stdio: "pipe",
-        encoding: "utf8",
-        maxBuffer: 64 * 1024,
-        timeout: GATEWAY_CALL_TIMEOUT_MS + 5_000,
-        shell: false,
-        windowsHide: true,
-      },
-    );
-    if (!result.error && result.status === 0) {
-      break;
-    }
-    if (attempt >= GATEWAY_CALL_MAX_ATTEMPTS || !shouldRetryGatewayCall(result)) {
-      break;
-    }
-    appendAuditEvent(
-      {
-        type: "trade_wrapper_handoff_retry",
-        ...auditBase,
-        ...deliveryMeta,
-        attempt,
-        status: result.status ?? null,
-        error: result.error ? String(result.error.message || result.error) : null,
-        stderr: summarizeChildOutput(result.stderr),
-        stdout: summarizeChildOutput(result.stdout),
-      },
-      { auditLogPath },
-    );
-    sleepMs(GATEWAY_CALL_RETRY_DELAY_MS * attempt);
-  }
-
-  if (!result || result.error || result.status !== 0) {
-    appendAuditEvent(
-      {
-        type: "trade_wrapper_handoff_failed",
-        ...auditBase,
-        ...deliveryMeta,
-        status: result.status ?? null,
-        error: result.error ? String(result.error.message || result.error) : null,
-        stderr: summarizeChildOutput(result.stderr),
-        stdout: summarizeChildOutput(result.stdout),
-      },
-      { auditLogPath },
-    );
-    return 1;
-  }
-
-  appendAuditEvent(
-    {
-      type: "trade_wrapper_handoff_started",
-      ...auditBase,
-      ...deliveryMeta,
-      status: result.status ?? 0,
-    },
-    { auditLogPath },
-  );
-
-  // Watchdog: wait for the agent run to finish and log the outcome.
-  // The gateway `agent` RPC returns { runId, acceptedAt } on success.
-  let gatewayRunId = null;
   try {
-    const parsed = JSON.parse(result.stdout || "{}");
-    gatewayRunId = typeof parsed.runId === "string" ? parsed.runId : null;
-  } catch {
-    // Non-JSON response — skip watchdog
-  }
+    let result = null;
+    for (let attempt = 1; attempt <= GATEWAY_CALL_MAX_ATTEMPTS; attempt++) {
+      result = spawnSyncImpl(
+        "openclaw",
+        [
+          "gateway",
+          "call",
+          "agent",
+          "--json",
+          "--timeout",
+          String(GATEWAY_CALL_TIMEOUT_MS),
+          "--params",
+          params,
+        ],
+        {
+          stdio: "pipe",
+          encoding: "utf8",
+          maxBuffer: 64 * 1024,
+          timeout: GATEWAY_CALL_TIMEOUT_MS + 5_000,
+          shell: false,
+          windowsHide: true,
+        },
+      );
+      if (!result.error && result.status === 0) {
+        break;
+      }
+      if (attempt >= GATEWAY_CALL_MAX_ATTEMPTS || !shouldRetryGatewayCall(result)) {
+        break;
+      }
+      appendAuditEvent(
+        {
+          type: "trade_wrapper_handoff_retry",
+          ...auditBase,
+          ...deliveryMeta,
+          attempt,
+          status: result.status ?? null,
+          error: result.error ? String(result.error.message || result.error) : null,
+          stderr: summarizeChildOutput(result.stderr),
+          stdout: summarizeChildOutput(result.stdout),
+        },
+        { auditLogPath },
+      );
+      sleepMs(GATEWAY_CALL_RETRY_DELAY_MS * attempt);
+    }
 
-  if (gatewayRunId) {
-    const waitParams = JSON.stringify({
-      runId: gatewayRunId,
-      timeoutMs: AGENT_WAIT_TIMEOUT_MS,
-    });
-    let waitCompleted = false;
-    const waitResultPromise = runAsyncCommandImpl(
-      "openclaw",
-      [
-        "gateway",
-        "call",
-        "agent.wait",
-        "--json",
-        "--timeout",
-        String(AGENT_WAIT_TIMEOUT_MS + 5_000),
-        "--params",
-        waitParams,
-      ],
+    if (!result || result.error || result.status !== 0) {
+      appendAuditEvent(
+        {
+          type: "trade_wrapper_handoff_failed",
+          ...auditBase,
+          ...deliveryMeta,
+          status: result.status ?? null,
+          error: result.error ? String(result.error.message || result.error) : null,
+          stderr: summarizeChildOutput(result.stderr),
+          stdout: summarizeChildOutput(result.stdout),
+        },
+        { auditLogPath },
+      );
+      return 1;
+    }
+
+    appendAuditEvent(
       {
-        stdio: "pipe",
-        encoding: "utf8",
-        maxBuffer: 64 * 1024,
-        timeout: AGENT_WAIT_TIMEOUT_MS + 15_000,
-        shell: false,
-        windowsHide: true,
+        type: "trade_wrapper_handoff_started",
+        ...auditBase,
+        ...deliveryMeta,
+        status: result.status ?? 0,
       },
+      { auditLogPath },
     );
 
-    const liveLinkPromise =
-      payload.runId && channel && target
-        ? (async () => {
-            const ctx = await waitForLiveLinkContext(payload.runId, {
-              streamContextDirPath: opts.streamContextDirPath,
-              pollIntervalMs: opts.liveLinkPollIntervalMs,
-              timeoutMs: LIVE_LINK_WAIT_TIMEOUT_MS,
-              shouldStop: () => waitCompleted,
-            });
-            if (!ctx) {
-              return { attempted: false, sent: false, reason: "context_not_found" };
-            }
+    // Watchdog: wait for the agent run to finish and log the outcome.
+    // The gateway `agent` RPC returns { runId, acceptedAt } on success.
+    let gatewayRunId = null;
+    try {
+      const parsed = JSON.parse(result.stdout || "{}");
+      gatewayRunId = typeof parsed.runId === "string" ? parsed.runId : null;
+    } catch {
+      // Non-JSON response — skip watchdog
+    }
 
-            const delivery = sendDirectMessage(
-              channel,
-              target,
-              `Watch live: ${ctx.sourceUrl}`,
-              spawnSyncImpl,
-            );
-            appendAuditEvent(
-              {
-                type: delivery.ok ? "trade_wrapper_live_link_sent" : "trade_wrapper_live_link_failed",
-                ...auditBase,
+    if (gatewayRunId) {
+      const waitParams = JSON.stringify({
+        runId: gatewayRunId,
+        timeoutMs: AGENT_WAIT_TIMEOUT_MS,
+      });
+      let waitCompleted = false;
+      const waitResultPromise = runAsyncCommandImpl(
+        "openclaw",
+        [
+          "gateway",
+          "call",
+          "agent.wait",
+          "--json",
+          "--timeout",
+          String(AGENT_WAIT_TIMEOUT_MS + 5_000),
+          "--params",
+          waitParams,
+        ],
+        {
+          stdio: "pipe",
+          encoding: "utf8",
+          maxBuffer: 64 * 1024,
+          timeout: AGENT_WAIT_TIMEOUT_MS + 15_000,
+          shell: false,
+          windowsHide: true,
+        },
+      );
+
+      const liveLinkPromise =
+        payload.runId && channel && target
+          ? (async () => {
+              const ctx = await waitForLiveLinkContext(payload.runId, {
+                streamContextDirPath: opts.streamContextDirPath,
+                pollIntervalMs: opts.liveLinkPollIntervalMs,
+                timeoutMs:
+                  Number.isFinite(opts.liveLinkWaitTimeoutMs) && opts.liveLinkWaitTimeoutMs > 0
+                    ? Math.floor(opts.liveLinkWaitTimeoutMs)
+                    : AGENT_WAIT_TIMEOUT_MS,
+                shouldStop: () => waitCompleted,
+              });
+              if (!ctx) {
+                return { attempted: false, sent: false, reason: "context_not_found" };
+              }
+
+              const delivery = sendDirectMessage(
                 channel,
-                targetHash: hashForAudit(target),
-                runIdHash: hashForAudit(payload.runId),
+                target,
+                `Watch live: ${ctx.sourceUrl}`,
+                spawnSyncImpl,
+              );
+              appendAuditEvent(
+                {
+                  type:
+                    delivery.ok ? "trade_wrapper_live_link_sent" : "trade_wrapper_live_link_failed",
+                  ...auditBase,
+                  channel,
+                  targetHash: hashForAudit(target),
+                  runIdHash: hashForAudit(payload.runId),
+                  sourceIdHash: hashForAudit(ctx.sourceId),
+                  sourceUrlHash: hashForAudit(ctx.sourceUrl),
+                  deliveryMode: "direct_send",
+                  deliveryStatus: delivery.status,
+                  deliveryReason: delivery.reason,
+                  deliveryStdout: delivery.stdout,
+                  deliveryStderr: delivery.stderr,
+                },
+                { auditLogPath },
+              );
+              return {
+                attempted: true,
+                sent: delivery.ok,
+                reason: delivery.reason,
                 sourceIdHash: hashForAudit(ctx.sourceId),
                 sourceUrlHash: hashForAudit(ctx.sourceUrl),
-                deliveryMode: "direct_send",
-                deliveryStatus: delivery.status,
-                deliveryReason: delivery.reason,
-                deliveryStdout: delivery.stdout,
-                deliveryStderr: delivery.stderr,
-              },
-              { auditLogPath },
-            );
-            return {
-              attempted: true,
-              sent: delivery.ok,
-              reason: delivery.reason,
-              sourceIdHash: hashForAudit(ctx.sourceId),
-              sourceUrlHash: hashForAudit(ctx.sourceUrl),
-            };
-          })()
-        : Promise.resolve({
-            attempted: false,
-            sent: false,
-            reason: payload.runId ? "missing_delivery_target" : "missing_run_id",
-          });
+              };
+            })()
+          : Promise.resolve({
+              attempted: false,
+              sent: false,
+              reason: payload.runId ? "missing_delivery_target" : "missing_run_id",
+            });
 
-    const waitResult = await waitResultPromise;
-    waitCompleted = true;
-    const liveLinkResult = await liveLinkPromise;
+      const waitResult = await waitResultPromise;
+      waitCompleted = true;
+      let liveLinkResult = await liveLinkPromise;
 
-    let waitStatus = "unknown";
-    try {
-      const parsed = JSON.parse(waitResult.stdout || "{}");
-      waitStatus = parsed.status || "unknown";
-    } catch {
-      // ignore parse errors
-    }
+      let waitStatus = "unknown";
+      try {
+        const parsed = JSON.parse(waitResult.stdout || "{}");
+        waitStatus = parsed.status || "unknown";
+      } catch {
+        // ignore parse errors
+      }
 
-    const verification = verifyTradeExecution(payload, tradeSessionKey, spawnSyncImpl, opts);
-    const verificationMeta = {
-      tradeSessionKeyHash: hashForAudit(tradeSessionKey),
-      executionConfirmed: verification.confirmed,
-      executionConfirmationSource: verification.source,
-      runtimeEventTypes: verification.runtimeEventTypes,
-      runtimeCreatedSource: verification.createdSource,
-      runtimeFinalized: verification.finalized,
-      sessionLookupOk: verification.sessionLookupOk,
-      sessionLookupReason: verification.sessionLookupReason ?? null,
-      sessionLookupStderr: verification.sessionLookupStderr ?? null,
-      toolResultCount: verification.toolResultCount,
-      assistantToolCallCount: verification.assistantToolCallCount,
-      liveLinkAttempted: liveLinkResult.attempted,
-      liveLinkSent: liveLinkResult.sent,
-      liveLinkReason: liveLinkResult.reason ?? null,
-      liveLinkSourceIdHash: liveLinkResult.sourceIdHash ?? null,
-      liveLinkSourceUrlHash: liveLinkResult.sourceUrlHash ?? null,
-    };
-    const finalAssistantMessage =
-      waitResult.status === 0 && waitStatus === "ok"
-        ? readFinalAssistantMessage(tradeSessionKey, spawnSyncImpl)
-        : {
-            ok: false,
-            reason: "wait_not_completed",
-            stderr: null,
-            message: "",
+      const verification = verifyTradeExecution(payload, tradeSessionKey, spawnSyncImpl, opts);
+      if (!liveLinkResult.sent && payload.runId && channel && target && verification.createdSource) {
+        const recoveredCtx = readStreamContextForRun(payload.runId, {
+          streamContextDirPath: opts.streamContextDirPath,
+        });
+        if (recoveredCtx) {
+          const delivery = sendDirectMessage(
+            channel,
+            target,
+            `Watch live: ${recoveredCtx.sourceUrl}`,
+            spawnSyncImpl,
+          );
+          appendAuditEvent(
+            {
+              type:
+                delivery.ok ? "trade_wrapper_live_link_sent" : "trade_wrapper_live_link_failed",
+              ...auditBase,
+              channel,
+              targetHash: hashForAudit(target),
+              runIdHash: hashForAudit(payload.runId),
+              sourceIdHash: hashForAudit(recoveredCtx.sourceId),
+              sourceUrlHash: hashForAudit(recoveredCtx.sourceUrl),
+              deliveryMode: "direct_send",
+              deliveryPhase: "post_wait_recovery",
+              deliveryStatus: delivery.status,
+              deliveryReason: delivery.reason,
+              deliveryStdout: delivery.stdout,
+              deliveryStderr: delivery.stderr,
+            },
+            { auditLogPath },
+          );
+          liveLinkResult = {
+            attempted: true,
+            sent: delivery.ok,
+            reason: delivery.reason,
+            sourceIdHash: hashForAudit(recoveredCtx.sourceId),
+            sourceUrlHash: hashForAudit(recoveredCtx.sourceUrl),
           };
-    const finalAssistantMeta = {
-      finalMessageLookupOk: finalAssistantMessage.ok,
-      finalMessageLookupReason: finalAssistantMessage.reason ?? null,
-      finalMessageLookupStderr: finalAssistantMessage.stderr ?? null,
-      finalMessageHash: finalAssistantMessage.message
-        ? hashForAudit(finalAssistantMessage.message)
-        : null,
-      finalMessageLength: finalAssistantMessage.message.length,
-    };
+        }
+      }
+      const verificationMeta = {
+        tradeSessionKeyHash: hashForAudit(tradeSessionKey),
+        executionConfirmed: verification.confirmed,
+        executionConfirmationSource: verification.source,
+        runtimeEventTypes: verification.runtimeEventTypes,
+        runtimeCreatedSource: verification.createdSource,
+        runtimeFinalized: verification.finalized,
+        sessionLookupOk: verification.sessionLookupOk,
+        sessionLookupReason: verification.sessionLookupReason ?? null,
+        sessionLookupStderr: verification.sessionLookupStderr ?? null,
+        toolResultCount: verification.toolResultCount,
+        assistantToolCallCount: verification.assistantToolCallCount,
+        liveLinkAttempted: liveLinkResult.attempted,
+        liveLinkSent: liveLinkResult.sent,
+        liveLinkReason: liveLinkResult.reason ?? null,
+        liveLinkSourceIdHash: liveLinkResult.sourceIdHash ?? null,
+        liveLinkSourceUrlHash: liveLinkResult.sourceUrlHash ?? null,
+      };
+      const finalAssistantMessage =
+        waitResult.status === 0 && waitStatus === "ok"
+          ? readFinalAssistantMessage(tradeSessionKey, spawnSyncImpl, opts)
+          : {
+              ok: false,
+              reason: "wait_not_completed",
+              stderr: null,
+              message: "",
+            };
+      const finalAssistantMeta = {
+        finalMessageLookupOk: finalAssistantMessage.ok,
+        finalMessageLookupReason: finalAssistantMessage.reason ?? null,
+        finalMessageLookupStderr: finalAssistantMessage.stderr ?? null,
+        finalMessageHash: finalAssistantMessage.message
+          ? hashForAudit(finalAssistantMessage.message)
+          : null,
+        finalMessageLength: finalAssistantMessage.message.length,
+      };
 
-    if (waitResult.error || waitResult.status !== 0) {
-      appendAuditEvent(
-        {
-          type: "trade_wrapper_wait_failed",
-          ...auditBase,
-          ...verificationMeta,
-          ...finalAssistantMeta,
-          gatewayRunId: hashForAudit(gatewayRunId),
-          waitStatus,
-          waitError: waitResult.error ? String(waitResult.error.message || waitResult.error) : null,
-          waitStderr: summarizeChildOutput(waitResult.stderr),
-          waitStdout: summarizeChildOutput(waitResult.stdout),
-          waitExitCode: waitResult.status ?? null,
-        },
-        { auditLogPath },
-      );
-    } else if (waitStatus === "ok" && verification.confirmed) {
-      appendAuditEvent(
-        {
-          type: "trade_wrapper_run_completed",
-          ...auditBase,
-          ...verificationMeta,
-          ...finalAssistantMeta,
-          gatewayRunId: hashForAudit(gatewayRunId),
-          waitStatus,
-        },
-        { auditLogPath },
-      );
-
-      const completionMessage =
-        finalAssistantMessage.message ||
-        (liveLinkResult.sent ? "The /trade run finished. Open the progress link for the final trades." : "");
-      if (completionMessage && channel && target) {
-        const notifyResult = sendWrapperNotice(
-          payload,
-          completionMessage,
-          channel,
-          target,
-          spawnSyncImpl,
-        );
+      if (waitResult.error || waitResult.status !== 0) {
         appendAuditEvent(
           {
-            type: notifyResult.ok
-              ? "trade_wrapper_final_message_sent"
-              : "trade_wrapper_final_message_failed",
+            type: "trade_wrapper_wait_failed",
             ...auditBase,
             ...verificationMeta,
             ...finalAssistantMeta,
-            channel: channel ?? null,
-            targetHash: target ? hashForAudit(target) : null,
-            noticeHash: hashForAudit(completionMessage),
-            noticeMode: notifyResult.mode,
-            noticeStatus: notifyResult.status,
-            noticeReason: notifyResult.reason,
+            gatewayRunId: hashForAudit(gatewayRunId),
+            waitStatus,
+            waitError: waitResult.error ? String(waitResult.error.message || waitResult.error) : null,
+            waitStderr: summarizeChildOutput(waitResult.stderr),
+            waitStdout: summarizeChildOutput(waitResult.stdout),
+            waitExitCode: waitResult.status ?? null,
           },
           { auditLogPath },
         );
-      }
-    } else if (waitStatus === "ok") {
-      appendAuditEvent(
-        {
-          type: "trade_wrapper_run_unconfirmed",
-          ...auditBase,
-          ...verificationMeta,
-          ...finalAssistantMeta,
-          gatewayRunId: hashForAudit(gatewayRunId),
-          waitStatus,
-        },
-        { auditLogPath },
-      );
-    } else {
-      const eventType = waitStatus === "timeout" ? "trade_wrapper_run_timeout" : "trade_wrapper_run_error";
-      appendAuditEvent(
-        {
-          type: eventType,
-          ...auditBase,
-          ...verificationMeta,
-          ...finalAssistantMeta,
-          gatewayRunId: hashForAudit(gatewayRunId),
-          waitStatus,
-          waitError: waitResult.error ? String(waitResult.error.message || waitResult.error) : null,
-          waitStderr: summarizeChildOutput(waitResult.stderr),
-        },
-        { auditLogPath },
-      );
-
-      let notifyMessage = null;
-      if (waitStatus === "timeout" && verification.confirmed && !liveLinkResult.sent) {
-        notifyMessage =
-          "Still working in the background. I'll send a progress link as soon as it's ready.";
-      } else if (waitStatus === "error") {
-        notifyMessage =
-          "The /trade run hit an internal error before it could finish. Resend the source to retry.";
-      }
-
-      if (notifyMessage) {
-        const notifyResult = sendWrapperNotice(
-          payload,
-          notifyMessage,
-          channel,
-          target,
-          spawnSyncImpl,
-        );
+      } else if (waitStatus === "ok" && verification.confirmed) {
         appendAuditEvent(
           {
-            type: notifyResult.ok ? "trade_wrapper_notice_sent" : "trade_wrapper_notice_failed",
+            type: "trade_wrapper_run_completed",
             ...auditBase,
-            channel: channel ?? null,
-            targetHash: target ? hashForAudit(target) : null,
-            noticeHash: hashForAudit(notifyMessage),
-            noticeMode: notifyResult.mode,
-            noticeStatus: notifyResult.status,
-            noticeReason: notifyResult.reason,
+            ...verificationMeta,
+            ...finalAssistantMeta,
+            gatewayRunId: hashForAudit(gatewayRunId),
+            waitStatus,
+          },
+          { auditLogPath },
+        );
+
+        const completionMessage =
+          finalAssistantMessage.message ||
+          (liveLinkResult.sent
+            ? "The /trade run finished. Open the progress link for the final trades."
+            : verification.createdSource
+              ? "The /trade run finished, but the wrapper could not deliver the progress link automatically."
+              : "");
+        if (completionMessage && channel && target) {
+          const notifyResult = sendWrapperNotice(
+            payload,
+            completionMessage,
+            channel,
+            target,
+            spawnSyncImpl,
+          );
+          appendAuditEvent(
+            {
+              type: notifyResult.ok
+                ? "trade_wrapper_final_message_sent"
+                : "trade_wrapper_final_message_failed",
+              ...auditBase,
+              ...verificationMeta,
+              ...finalAssistantMeta,
+              channel: channel ?? null,
+              targetHash: target ? hashForAudit(target) : null,
+              noticeHash: hashForAudit(completionMessage),
+              noticeMode: notifyResult.mode,
+              noticeStatus: notifyResult.status,
+              noticeReason: notifyResult.reason,
+            },
+            { auditLogPath },
+          );
+        }
+      } else if (waitStatus === "ok") {
+        appendAuditEvent(
+          {
+            type: "trade_wrapper_run_unconfirmed",
+            ...auditBase,
+            ...verificationMeta,
+            ...finalAssistantMeta,
+            gatewayRunId: hashForAudit(gatewayRunId),
+            waitStatus,
+          },
+          { auditLogPath },
+        );
+      } else {
+        const eventType =
+          waitStatus === "timeout" ? "trade_wrapper_run_timeout" : "trade_wrapper_run_error";
+        appendAuditEvent(
+          {
+            type: eventType,
+            ...auditBase,
+            ...verificationMeta,
+            ...finalAssistantMeta,
+            gatewayRunId: hashForAudit(gatewayRunId),
+            waitStatus,
+            waitError: waitResult.error ? String(waitResult.error.message || waitResult.error) : null,
+            waitStderr: summarizeChildOutput(waitResult.stderr),
+          },
+          { auditLogPath },
+        );
+
+        let notifyMessage = null;
+        if (waitStatus === "timeout" && verification.confirmed && !liveLinkResult.sent) {
+          notifyMessage =
+            "Still working in the background. I'll send a progress link as soon as it's ready.";
+        } else if (waitStatus === "error") {
+          notifyMessage =
+            "The /trade run hit an internal error before it could finish. Resend the source to retry.";
+        }
+
+        if (notifyMessage) {
+          const notifyResult = sendWrapperNotice(
+            payload,
+            notifyMessage,
+            channel,
+            target,
+            spawnSyncImpl,
+          );
+          appendAuditEvent(
+            {
+              type: notifyResult.ok ? "trade_wrapper_notice_sent" : "trade_wrapper_notice_failed",
+              ...auditBase,
+              channel: channel ?? null,
+              targetHash: target ? hashForAudit(target) : null,
+              noticeHash: hashForAudit(notifyMessage),
+              noticeMode: notifyResult.mode,
+              noticeStatus: notifyResult.status,
+              noticeReason: notifyResult.reason,
+            },
+            { auditLogPath },
+          );
+        }
+      }
+    }
+
+    return 0;
+  } finally {
+    if (payload.runId) {
+      try {
+        const cleanup = completeTradeWorkerRun(payload.sessionKey, payload.runId, opts);
+        if (cleanup.removed || cleanup.rotated || cleanup.staleRunCount > 0) {
+          appendAuditEvent(
+            {
+              type: "trade_worker_lane_state_updated",
+              ...auditBase,
+              runIdHash: hashForAudit(payload.runId),
+              laneVersion: cleanup.laneVersion,
+              laneRunRemoved: cleanup.removed,
+              laneRotated: cleanup.rotated,
+              laneRemainingCount: cleanup.remainingCount,
+              laneStaleRunCount: cleanup.staleRunCount,
+            },
+            { auditLogPath },
+          );
+        }
+      } catch (error) {
+        appendAuditEvent(
+          {
+            type: "trade_worker_lane_state_cleanup_failed",
+            ...auditBase,
+            runIdHash: hashForAudit(payload.runId),
+            reason: error instanceof Error ? error.message : String(error),
           },
           { auditLogPath },
         );
       }
     }
   }
-
-  return 0;
 }

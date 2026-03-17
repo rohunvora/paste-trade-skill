@@ -5,11 +5,17 @@ import {
   ACK_TEXT,
   MAX_COMMAND_CHARS,
   USAGE_TEXT,
+  buildAckText,
   buildWrapperPayload,
   queueTradeWrapper,
   readCommandArg,
 } from "./trade-slash-dispatch-lib.mjs";
-import { appendAuditEvent, hashForAudit } from "./run-trade-wrapper-lib.mjs";
+import {
+  appendAuditEvent,
+  completeTradeWorkerRun,
+  hashForAudit,
+  registerTradeWorkerRun,
+} from "./run-trade-wrapper-lib.mjs";
 
 export const TRADE_COMMAND_TOOL = "trade_slash_dispatch";
 export const WRAPPER_SCRIPT_PATH = fileURLToPath(new URL("./run-trade-wrapper.mjs", import.meta.url));
@@ -36,12 +42,14 @@ const tradeDispatchToolSchema = {
 export function createTradeDispatchTool(api, ctx, deps = {}) {
   const queueTradeWrapperImpl = deps.queueTradeWrapperImpl ?? queueTradeWrapper;
   const appendAuditEventImpl = deps.appendAuditEventImpl ?? appendAuditEvent;
+  const registerTradeWorkerRunImpl = deps.registerTradeWorkerRunImpl ?? registerTradeWorkerRun;
+  const completeTradeWorkerRunImpl = deps.completeTradeWorkerRunImpl ?? completeTradeWorkerRun;
   const existsSyncImpl = deps.existsSyncImpl ?? existsSync;
   return {
     name: TRADE_COMMAND_TOOL,
     label: "Trade Slash Dispatch",
     description:
-      "Acknowledge /trade immediately, run it in an isolated background session, and return only the progress link and final summary to chat.",
+      "Acknowledge /trade immediately, then hand off the actual trade run to a private per-chat worker lane.",
     parameters: tradeDispatchToolSchema,
     execute: async (_toolCallId, rawArgs) => {
       const args = rawArgs && typeof rawArgs === "object" ? rawArgs : {};
@@ -106,6 +114,8 @@ export function createTradeDispatchTool(api, ctx, deps = {}) {
         messageHash: hashForAudit(payload.message),
         messageLength: payload.message.length,
       };
+      let registration = null;
+      let ackText = ACK_TEXT;
 
       try {
         if (!existsSyncImpl(WRAPPER_SCRIPT_PATH)) {
@@ -122,10 +132,20 @@ export function createTradeDispatchTool(api, ctx, deps = {}) {
           };
         }
 
+        registration = registerTradeWorkerRunImpl(payload.sessionKey, runId);
+        payload = {
+          ...payload,
+          laneVersion: registration.laneVersion,
+        };
+        ackText = buildAckText(registration.aheadCount);
+
         const result = queueTradeWrapperImpl(payload, { scriptPath: WRAPPER_SCRIPT_PATH });
         if (result.status !== "accepted") {
+          completeTradeWorkerRunImpl(payload.sessionKey, runId);
           api.logger.warn("trade slash wrapper: failed to queue /trade handoff", {
             ...auditMeta,
+            laneVersion: registration.laneVersion,
+            queueDepthAhead: registration.aheadCount,
             exitCode: result.exitCode,
             reason: result.reason,
           });
@@ -141,16 +161,29 @@ export function createTradeDispatchTool(api, ctx, deps = {}) {
 
         api.logger.info("trade slash wrapper: queued /trade handoff", {
           ...auditMeta,
+          laneVersion: registration.laneVersion,
+          queueDepthAhead: registration.aheadCount,
           childPid: result.pid ?? null,
         });
         appendAuditEventImpl({
           type: "trade_wrapper_ack_sent",
           ...auditMeta,
-          ackLength: ACK_TEXT.length,
+          laneVersion: registration.laneVersion,
+          queueDepthAhead: registration.aheadCount,
+          ackLength: ackText.length,
         });
       } catch (error) {
+        if (registration) {
+          try {
+            completeTradeWorkerRunImpl(payload.sessionKey, runId);
+          } catch {
+            // Best effort rollback only.
+          }
+        }
         api.logger.warn("trade slash wrapper: failed to queue /trade handoff", {
           ...auditMeta,
+          laneVersion: registration?.laneVersion ?? null,
+          queueDepthAhead: registration?.aheadCount ?? null,
           error: error instanceof Error ? error.message : String(error),
         });
         return {
@@ -163,12 +196,14 @@ export function createTradeDispatchTool(api, ctx, deps = {}) {
       }
 
       return {
-        content: ACK_TEXT,
+        content: ackText,
         details: {
           status: "accepted",
           targetSessionKeyHash: hashForAudit(payload.sessionKey),
           sessionRemapped: payload.sessionKey !== sessionKey,
           runId: payload.runId ?? null,
+          laneVersion: registration?.laneVersion ?? null,
+          queueDepthAhead: registration?.aheadCount ?? 0,
         },
       };
     },

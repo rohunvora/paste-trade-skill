@@ -1,7 +1,7 @@
 {
   "id": "trade-slash-wrapper",
   "name": "Trade Slash Wrapper",
-  "description": "Guarantees an immediate /trade acknowledgment, runs the trade in an isolated background session, and keeps chat updates concise.",
+  "description": "Guarantees an immediate /trade acknowledgment, queues same-chat runs in a private worker lane, and keeps chat updates concise.",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -17,9 +17,11 @@ This is OpenClaw-specific. Claude Code and Codex do not install or use it.
 
 What it does:
 - acknowledges `/trade` immediately in your current chat
-- starts the real run in a separate background session so `/trade` does not pollute your main context
-- sends a progress link as soon as source creation finishes
+- runs `/trade` in a private per-chat worker lane so `/trade` does not pollute your main context
+- queues later `/trade` requests from the same chat instead of racing them
+- sends a progress link as soon as source creation finishes for that specific run, including queued runs that start later
 - sends only the compact final summary back to chat instead of intermediate worker chatter
+- rotates to a fresh hidden worker lane after the queue drains
 - remaps Telegram slash sessions back to the DM thread when needed
 
 Run this once after install, and again after every update:
@@ -48,8 +50,9 @@ openclaw plugins info trade-slash-wrapper
 
 Expected chat flow:
 - immediate acknowledgement that the run started in the background
-- a progress link as soon as the source page is ready
-- one compact final summary when routing and posting finish
+- if another `/trade` is already running in that chat, an immediate queued acknowledgement instead
+- a progress link as soon as that run's source page is ready
+- one compact final summary when routing and posting finish, even for queued runs
 
 X login is optional and should not block first run.
 

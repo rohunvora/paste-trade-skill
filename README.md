@@ -15,9 +15,11 @@ Finds every tradeable thesis in a source and routes each to an executable trade 
 Claude Code and Codex only need the `trade` skill itself.
 
 OpenClaw needs one extra OpenClaw-only component: an async command bridge that
-starts each `/trade` run in a separate background session, sends a progress
-link as soon as the source is created, and keeps intermediate worker chatter
-out of your main chat. If you are not using OpenClaw, ignore that step completely.
+acknowledges `/trade` immediately, queues same-chat requests in a private
+background worker lane, sends a progress link as soon as the source is
+created for that run, returns a compact final summary when it finishes, and
+keeps intermediate worker chatter out of your main chat. If you are not using
+OpenClaw, ignore that step completely.
 
 ### Claude Code / Codex
 

@@ -68,6 +68,15 @@ export function readCommandArg(args) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export function buildAckText(aheadCount) {
+  const normalizedAheadCount =
+    Number.isFinite(aheadCount) && aheadCount > 0 ? Math.max(0, Math.floor(aheadCount)) : 0;
+  if (normalizedAheadCount === 0) {
+    return ACK_TEXT;
+  }
+  return `Queued /trade behind ${normalizedAheadCount} earlier ${normalizedAheadCount === 1 ? "run" : "runs"}. I'll send a progress link when it starts.`;
+}
+
 export function buildTradePrompt(input, runId) {
   const lines = [
     `Execute the isolated /trade request from the additional system instructions now.`,

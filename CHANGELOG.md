@@ -5,6 +5,20 @@ Versioning note:
 - the March 5 rewrite was previously tracked internally as `2.0.0`
 - install commands use the bare repo path (no version tag)
 
+## [1.2.6] - 2026-03-17
+
+OpenClaw same-chat queueing and queued-run delivery hardening.
+
+### Fixed
+
+- `openclaw-plugin/index-lib.mjs` — registers `/trade` runs into a per-chat worker lane before handoff so later requests in the same chat queue instead of racing
+- `openclaw-plugin/run-trade-wrapper-lib.mjs` — reuses one hidden worker session per chat burst, rotates to a fresh lane after the queue drains, cleans up lane state when wrapper children exit, keeps live-link waiting aligned with queued execution, and bounds final-message lookup so queued completions still deliver
+- `openclaw-plugin/trade-slash-dispatch-lib.mjs` — returns queued acknowledgement text when a same-chat `/trade` is already ahead in line
+
+### Changed
+
+- OpenClaw chat flow now supports deterministic FIFO behavior within one chat: immediate run or queued ack -> progress link when that run starts -> compact final summary, including queued runs that begin later
+
 ## [1.2.5] - 2026-03-15
 
 Breaking news chain trading.
