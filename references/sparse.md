@@ -45,6 +45,22 @@ Validation: every `subjects[].label` needs a matching `direct_checks[].subject_l
 
 
 
+## Classify
+
+Before entering the tree, classify the source:
+
+| Type | Pattern | Action |
+|------|---------|--------|
+| **Direct call** | Ticker named with clear direction | Skip SEARCH. Go straight to SAVE → ROUTE. |
+| **Implied thesis** | Claim exists but ticker needs interpretation | Full tree below with SEARCH. |
+| **Breaking news** | Time-sensitive, obvious asset impact | Read `references/fast.md` and follow it. |
+| **Multi-ticker list** | Multiple independent theses listed | Each is a separate thesis. Named tickers skip SEARCH individually. |
+| **Pair trade** | Author names both legs explicitly | Two trades. Route both. |
+| **Vague** | No directional claim | One web search to test. If nothing, finalize with no trades. |
+
+For replies: extract.ts returns `replied_to_tweet` with parent context. Combine reply + parent text, then classify.
+For image tweets: read `image_files` first, then classify based on the full picture.
+
 ## List detection
 
 If the source lists items that need independent reasoning chains — distinct
@@ -58,10 +74,11 @@ then run the tree below per thesis.
 ```
 SPARSE SOURCE
 │
-├─ Is this breaking news or new information?
-│  YES → Read `skill/references/fast.md` and follow it.
-│    Returns to SKILL.md §10 Post when done.
-│  NO → Continue below.
+├─ CLASSIFY (see table above)
+│  Direct call → skip to SAVE, then ROUTE (no SEARCH)
+│  Breaking news → Read fast.md. Returns to SKILL.md §10 Post.
+│  Vague → one web search. If nothing, finalize. No trades.
+│  All others → continue below.
 │
 ├─ What is the person actually saying?
 │  ├─ What are they NOT saying that it sounds like?
@@ -77,27 +94,31 @@ SPARSE SOURCE
 │  Track thesis ID for route.ts and save --update.
 │  stream-thought.ts --run-id <run_id> "Researching..."
 │
-├─ SEARCH (parallel) ←─────────────────────────────┐
-│  discover.ts --query "<term>" per who entry        │
-│    Prefer reference_symbols matches for HIP-3.     │
-│    --catalog for full non-crypto HL listing.        │
-│  discover.ts --query "<event/catalyst keywords>"   │
-│    --platform polymarket                            │
-│    Always run this alongside HL discovery.          │
-│    Use the event noun, not the ticker.              │
-│  Web search: verify thesis, find catalysts          │
-│    Cite: { "text", "url", "origin": "research" }   │
-│  Check hl-universe.md for HL upgrades over ETFs    │
-│  Check prediction-markets.md for binary events     │
-│  Search for the investment thesis, not the news     │
-│                                                     │
-├─ EVALUATE                                           │
-│  For each candidate:                                │
-│    Reasoning chain from belief to trade?             │
-│    Is there a better trade?                         │
-│  If PM contract found (>$50K vol) that prices the   │
-│    event/catalyst → add as separate thesis.          │
-│  If gaps → loop back to SEARCH ─────────────────────┘
+├─ SEARCH (only for unnamed tickers) ←──────────────┐
+│  discover.ts --query "<term>" for unnamed tickers   │
+│    only. If the author wrote a $cashtag or named     │
+│    the ticker, skip discover for that ticker.        │
+│    One discover per thesis max — if the first found  │
+│    the instrument, stop.                             │
+│    Prefer reference_symbols matches for HIP-3.       │
+│    --catalog for full non-crypto HL listing.         │
+│  discover.ts --query "<event/catalyst keywords>"     │
+│    --platform polymarket                              │
+│    For event-driven theses only, not price trades.   │
+│    Use the event noun, not the ticker.               │
+│  Web search: verify thesis, find catalysts            │
+│    Cite: { "text", "url", "origin": "research" }     │
+│  Check hl-universe.md for HL upgrades over ETFs      │
+│  Check prediction-markets.md for binary events       │
+│  Search for the investment thesis, not the news       │
+│                                                       │
+├─ EVALUATE                                             │
+│  For each candidate:                                  │
+│    Reasoning chain from belief to trade?               │
+│    Is there a better trade?                           │
+│  If PM contract found (>$50K vol) that prices the     │
+│    event/catalyst → add as separate thesis.            │
+│  If gaps → loop back to SEARCH ───────────────────────┘
 │  Then pick 1-3. No redundant routes.
 │
 ├─ PICK

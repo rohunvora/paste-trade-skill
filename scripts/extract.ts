@@ -564,6 +564,17 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
       ? data.includes?.users?.find(u => u.id === quotedTweet.author_id)
       : null;
 
+    // Extract parent tweet if this is a reply
+    const repliedToRef = t.referenced_tweets?.find(r => r.type === "replied_to");
+    const parentTweet = repliedToRef ? data.includes?.tweets?.find(pt => pt.id === repliedToRef.id) : null;
+    const parentAuthor = parentTweet?.author_id
+      ? data.includes?.users?.find(u => u.id === parentTweet.author_id)
+      : null;
+
+    if (parentTweet) {
+      console.error(`[transcript] Reply detected — parent tweet by @${parentAuthor?.username ?? "unknown"}: ${(parentTweet.note_tweet?.text ?? parentTweet.text).slice(0, 80)}...`);
+    }
+
     return JSON.stringify({
       source: extractedArticle ? "x_api_article" : "x_api",
       url: `https://x.com/${username}/status/${tweetId}`,
@@ -574,6 +585,7 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
       text: effectiveText,
       word_count: effectiveWordCount,
       is_long_tweet: isLongTweet,
+      is_reply: !!parentTweet,
       ...(extractedArticle
         ? {
             tweet_text: fullText,
@@ -583,6 +595,7 @@ async function extractTweetViaApi(tweetId: string, handle: string): Promise<stri
             ...(extractedArticle.article_title ? { article_title: extractedArticle.article_title } : {}),
           }
         : {}),
+      ...(parentTweet ? { replied_to_tweet: { author: parentAuthor?.username ?? "unknown", text: parentTweet.note_tweet?.text ?? parentTweet.text } } : {}),
       ...(quotedTweet ? { quoted_tweet: { author: quotedAuthor?.username ?? "unknown", text: quotedTweet.note_tweet?.text ?? quotedTweet.text } } : {}),
       likes: t.public_metrics?.like_count ?? 0,
       retweets: t.public_metrics?.retweet_count ?? 0,
