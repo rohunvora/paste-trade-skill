@@ -73,4 +73,4 @@ bash ~/.openclaw/skills/trade/scripts/setup-openclaw-wrapper.sh
 ## Account portability
 
 - Preferred: reuse one `PASTE_TRADE_KEY` across clients.
-- Fallback (separate keys already created): run `bun run scripts/connect.ts` on the key/account you want to keep.
+- To sign in to the web: run `bun run scripts/signin.ts` — opens a one-time link in your browser.

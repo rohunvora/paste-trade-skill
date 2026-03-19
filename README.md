@@ -105,8 +105,7 @@ bash <skill-install-path>/scripts/setup-openclaw-wrapper.sh
 ## Account portability
 
 - Preferred path: use one `PASTE_TRADE_KEY` across OpenClaw, Claude Code, and Codex.
-- Fallback for users who already created separate keys: run `bun run scripts/connect.ts` from the account you want to keep.
-- X login is optional. It should not block first `/trade` run.
+- To sign in to the web: run `bun run scripts/signin.ts` — opens a one-time link in your browser.
 
 ## Repository structure
 

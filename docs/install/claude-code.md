@@ -33,4 +33,4 @@ https://github.com/rohunvora/paste-trade-skill
 ## Account portability
 
 - Preferred: use the same `PASTE_TRADE_KEY` used in your other clients.
-- Fallback if keys are split: run `bun run scripts/connect.ts` from the account you want to keep.
+- To sign in to the web: run `bun run scripts/signin.ts` — opens a one-time link in your browser.
