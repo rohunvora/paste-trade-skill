@@ -1,4 +1,4 @@
-# paste.trade/skill
+# paste.trade
 
 Can an AI read what someone said about markets and turn it into a tracked, auditable trade?
 
