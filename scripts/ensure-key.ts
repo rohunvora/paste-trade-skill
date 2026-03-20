@@ -10,6 +10,7 @@
 
 import { writeFileSync, existsSync, appendFileSync } from "fs";
 import { getEnvSearchPaths, getPreferredEnvWritePath, readEnvValue } from "./runtime-paths";
+import { normalizeTrustedBaseUrl } from "./security";
 
 /** Read a key from process.env or the nearest user/project .env context. */
 export function loadKey(key: string): string | undefined {
@@ -18,7 +19,10 @@ export function loadKey(key: string): string | undefined {
 
 /** Resolve the base URL for paste.trade API. */
 export function getBaseUrl(): string {
-  return loadKey("PASTE_TRADE_URL") || loadKey("BOARD_URL") || loadKey("BELIEF_BOARD_URL") || "https://paste.trade";
+  const configured = loadKey("PASTE_TRADE_URL") || loadKey("BOARD_URL") || loadKey("BELIEF_BOARD_URL");
+  const { baseUrl, trusted, reason } = normalizeTrustedBaseUrl(configured);
+  if (!trusted) throw new Error(reason ?? "Invalid base URL configuration.");
+  return baseUrl;
 }
 
 /**
@@ -30,11 +34,11 @@ export async function ensureKey(): Promise<string | null> {
   const existing = loadKey("PASTE_TRADE_KEY");
   if (existing) return existing;
 
-  // No key found — auto-provision
-  const baseUrl = getBaseUrl();
-  console.error(`[paste.trade] No API key found. Creating your identity...`);
-
   try {
+    // No key found — auto-provision
+    const baseUrl = getBaseUrl();
+    console.error(`[paste.trade] No API key found. Creating your identity...`);
+
     const res = await fetch(`${baseUrl}/api/keys`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
