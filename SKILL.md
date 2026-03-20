@@ -425,6 +425,48 @@ echo '<JSON with who + route_evidence + derivation>' | bun run scripts/save.ts -
 
 This emits `thesis_routed` (or `thesis_dropped`) events automatically, updating the live source page with derivation data as each thesis resolves.
 
+### 9.5 - Execute (Optional)
+
+If `HL_PRIVATE_KEY` and `HL_API_WALLET` are set in `.env`, offer real execution on Hyperliquid after routing completes.
+
+#### Confirm & Execute flow
+
+1. After route.ts returns a routed thesis on Hyperliquid, present a trade summary:
+   ```
+   EXECUTE? BUY NVDA @ $135.20 on Hyperliquid (1x leverage, $50 position)
+   Thesis: [author's thesis]
+   Entry: $135.20 | Size: $50 | Leverage: 1x
+   ```
+2. Wait for user confirmation:
+   - "yes", "execute", "go" → execute the trade
+   - "no", "skip", "paper" → skip execution, post as paper trade
+3. If confirmed, call execute.ts:
+
+```bash
+echo '{"ticker":"NVDA","direction":"long","size_usd":50,"leverage":1}' | bun run scripts/execute.ts
+# Returns: { status, order_id, fill_price, filled_size, timestamp, error? }
+```
+
+4. Attach execution result to the trade payload as `execution_details`
+5. Set `mode: "real"` on the TrackedTrade (instead of `"paper"`)
+6. If execution fails, warn the user and fall back to paper trade
+
+#### Position management
+
+```bash
+bun run scripts/positions.ts
+# Returns: { balance: { total, available, in_positions }, positions: [...] }
+
+bun run scripts/positions.ts --close NVDA
+# Closes a position
+```
+
+#### Safety
+
+- Config in `config/execution.ts`: max $50/trade, max $500 total, 2x leverage default
+- `TESTNET=true` by default — uses free test USDC, no real money
+- Always requires user confirmation before executing
+
 ### 10 - Post
 
 Post each trade:

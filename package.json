@@ -2,5 +2,9 @@
   "name": "paste-trade-skill",
   "version": "1.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@nktkas/hyperliquid": "^0.32.1",
+    "viem": "^2.47.5"
+  }
 }
