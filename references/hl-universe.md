@@ -19,7 +19,7 @@ and limited trading hours. An HL perp on the same underlying gives you:
 Use `discover.ts --catalog` for the live listing. Key categories:
 
 **Indices** — track major ETFs as leveraged perps:
-- USA500 (≈ SPY/S&P 500), USTECH/XYZ100 (≈ QQQ/Nasdaq), SMALL2000 (≈ IWM/Russell 2000)
+- SP500 (≈ SPY/S&P 500, official xyz:SP500), USTECH/XYZ100 (≈ QQQ/Nasdaq), SMALL2000 (≈ IWM/Russell 2000)
 - SEMIS (≈ SMH), BIOTECH (≈ XBI), DEFENSE (≈ SHLD/ITA), NUCLEAR (≈ NLR)
 - ENERGY/USENERGY (≈ XLE), INFOTECH (≈ XLK), MAG7 (≈ MAGS), ROBOT (≈ BOTZ)
 - GLDMINE (≈ GDX), USBOND (≈ TLT), URNM

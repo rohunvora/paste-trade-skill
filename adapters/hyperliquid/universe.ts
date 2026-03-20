@@ -76,6 +76,7 @@ const INDEX_BASES = new Set([
   "DEFENSE",
   "ENERGY",
   "BIOTECH",
+  "SP500",
   "USA500",
   "US500",
   "USTECH",
@@ -115,6 +116,7 @@ const THEME_TAGS_BY_BASE: Record<string, string[]> = {
   ROBOT: ["robotics", "automation"],
   BIOTECH: ["biotech", "healthcare"],
   XYZ100: ["us-tech-index"],
+  SP500: ["us-large-cap-index"],
   USA500: ["us-large-cap-index"],
   US500: ["us-large-cap-index"],
   USTECH: ["us-tech-index"],
@@ -142,7 +144,8 @@ const DESCRIPTION_BY_BASE: Record<string, string> = {
   NUCLEAR: "Thematic index perpetual tracking nuclear-related equities.",
   SEMIS: "Thematic index perpetual tracking semiconductor equities.",
   MAG7: "Thematic index perpetual tracking a mega-cap U.S. technology basket.",
-  USA500: "U.S. large-cap equity index perpetual.",
+  SP500: "Official S&P 500 perpetual on Hyperliquid (xyz:SP500).",
+  USA500: "U.S. large-cap equity index perpetual (legacy, prefer SP500).",
   US500: "U.S. large-cap equity index perpetual.",
   USTECH: "U.S. technology index perpetual.",
   USBOND: "U.S. bond/rates exposure perpetual.",
@@ -656,7 +659,7 @@ export async function buildHlUniverse(options: BuildUniverseOptions = {}): Promi
           : undefined;
       const sourceWarnings: string[] = [];
       if (actualDex === "cash" && base.toUpperCase() === "USA500") {
-        sourceWarnings.push("Some dreamcash docs use US500-USDT naming; live executable symbol is cash:USA500.");
+        sourceWarnings.push("USA500 is legacy; prefer xyz:SP500 (official S&P 500 perp).");
       }
 
       instruments.push({

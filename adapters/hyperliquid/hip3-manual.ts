@@ -156,12 +156,12 @@ export const HIP3_MANUAL_PROFILES: Record<string, Hip3ManualProfile> = {
   US500: {
     reference_symbols: ["US500"],
     search_aliases: ["us 500"],
-    routing_note: "S&P 500 exposure. See also USA500 for the primary large-cap index.",
+    routing_note: "S&P 500 exposure. See also SP500 (xyz:SP500) for the official index perp.",
   },
-  USA500: {
-    reference_symbols: ["SPY", "VOO", "IVV", "SPLG", "USA500"],
+  SP500: {
+    reference_symbols: ["SPY", "VOO", "IVV", "SPLG", "SP500", "USA500"],
     search_aliases: ["s&p 500", "sp500", "us 500"],
-    routing_note: "Broad U.S. large-cap index exposure.",
+    routing_note: "Official S&P 500 perpetual on Hyperliquid (xyz:SP500). Replaces USA500.",
   },
   USBOND: {
     reference_symbols: ["TLT", "USBOND"],
@@ -221,8 +221,8 @@ export const HIP3_EQUIVALENT_ALIASES: Record<string, string> = {
   SLV: "SILVER",
   SMH: "SEMIS",
   SOXX: "SEMIS",
-  SPLG: "USA500",
-  SPY: "USA500",
+  SPLG: "SP500",
+  SPY: "SP500",
   TLT: "USBOND",
   UNG: "NATGAS",
   URA: "URNM",
