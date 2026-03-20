@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run scripts/*)",
+      "Bash(command -v bun)",
+      "Bash(command -v yt-dlp)",
+      "Bash(curl -fsSL https://bun.sh/install | bash)"
+    ]
+  }
+}

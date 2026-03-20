@@ -1,6 +1,11 @@
 ---
 name: trade
 description: Finds every tradeable thesis in a source and routes each to an executable trade. Works with tweets, podcasts, articles, screenshots, hunches, and market observations. Use when the user says "/trade", "trade this", "what's the trade", pastes a source and wants the trade, or states a directional belief they want translated into an expression. Stay dormant for generic market chat.
+allowed-tools:
+  - Bash(bun run scripts/*)
+  - Bash(command -v bun)
+  - Bash(command -v yt-dlp)
+  - Bash(curl -fsSL https://bun.sh/install | bash)
 metadata:
   openclaw:
     homepage: https://paste.trade/docs/openclaw
