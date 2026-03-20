@@ -59,6 +59,9 @@ const TELEGRAM_DIRECT_PREFIX_NO_AGENT = "telegram:direct:";
 const TELEGRAM_DIRECT_PREFIX = "agent:main:telegram:direct:";
 const AGENT_TELEGRAM_SLASH_PATTERN = /^agent:([^:]+):telegram:slash:(.+)$/i;
 const AGENT_TELEGRAM_DIRECT_PATTERN = /^agent:([^:]+):telegram:direct:(.+)$/i;
+const AGENT_TELEGRAM_GROUP_PATTERN = /^agent:([^:]+):telegram:group:(.+)$/i;
+const TELEGRAM_GROUP_PREFIX = "telegram:group:";
+const TOPIC_SUFFIX_PATTERN = /:topic:(\d+)$/i;
 const DEFAULT_QUEUE_MAX_ATTEMPTS = 2;
 const DEFAULT_QUEUE_RETRY_DELAY_MS = 600;
 const MAX_CHILD_OUTPUT_CHARS = 280;
@@ -146,32 +149,81 @@ export function normalizeTradeSessionKey(sessionKey) {
     return `agent:${agentId}:telegram:direct:${chatId}`;
   }
 
+  // Telegram forum/group with topic: agent:main:telegram:group:-100XXX:topic:N
+  // Normalize to agent:main:telegram:direct:-100XXX:topic:N for delivery
+  const groupMatch = normalized.match(AGENT_TELEGRAM_GROUP_PATTERN);
+  if (groupMatch) {
+    const agentId = groupMatch[1].trim();
+    const rest = groupMatch[2].trim(); // e.g. "-1003855708596:topic:1"
+    if (!agentId || !rest) {
+      return "";
+    }
+    return `agent:${agentId}:telegram:direct:${rest}`;
+  }
+
+  // Raw telegram:group:-100XXX:topic:N without agent prefix
+  if (lower.startsWith(TELEGRAM_GROUP_PREFIX)) {
+    const rest = normalized.slice(TELEGRAM_GROUP_PREFIX.length).trim();
+    if (!rest) {
+      return "";
+    }
+    return `${TELEGRAM_DIRECT_PREFIX}${rest}`;
+  }
+
   return normalized;
 }
 
+/**
+ * Extract the Telegram topic ID from a session key, if present.
+ * Returns the numeric topic ID string or null.
+ */
+export function deriveTelegramTopicFromSessionKey(sessionKey) {
+  const normalized = typeof sessionKey === "string" ? sessionKey.trim() : "";
+  const topicMatch = normalized.match(TOPIC_SUFFIX_PATTERN);
+  return topicMatch ? topicMatch[1] : null;
+}
+
+/**
+ * Extract the base Telegram chat ID from a session key (strips :topic:N suffix).
+ * For group chats like agent:main:telegram:group:-100XXX:topic:1, returns "-100XXX".
+ * For direct chats like agent:main:telegram:direct:-100XXX:topic:1, returns "-100XXX".
+ */
 export function deriveTelegramTargetFromSessionKey(sessionKey) {
   const normalized = typeof sessionKey === "string" ? sessionKey.trim() : "";
   if (!normalized) {
     return "";
   }
 
-  if (normalized.toLowerCase().startsWith(TELEGRAM_SLASH_PREFIX)) {
-    return normalized.slice(TELEGRAM_SLASH_PREFIX.length).trim();
+  // Strip :topic:N suffix to get the base chat ID
+  const withoutTopic = normalized.replace(TOPIC_SUFFIX_PATTERN, "").trim();
+
+  if (withoutTopic.toLowerCase().startsWith(TELEGRAM_SLASH_PREFIX)) {
+    return withoutTopic.slice(TELEGRAM_SLASH_PREFIX.length).trim();
   }
-  if (normalized.toLowerCase().startsWith(TELEGRAM_DIRECT_PREFIX_NO_AGENT)) {
-    return normalized.slice(TELEGRAM_DIRECT_PREFIX_NO_AGENT.length).trim();
+  if (withoutTopic.toLowerCase().startsWith(TELEGRAM_DIRECT_PREFIX_NO_AGENT)) {
+    return withoutTopic.slice(TELEGRAM_DIRECT_PREFIX_NO_AGENT.length).trim();
   }
-  if (normalized.toLowerCase().startsWith(TELEGRAM_DIRECT_PREFIX)) {
-    return normalized.slice(TELEGRAM_DIRECT_PREFIX.length).trim();
+  if (withoutTopic.toLowerCase().startsWith(TELEGRAM_DIRECT_PREFIX)) {
+    return withoutTopic.slice(TELEGRAM_DIRECT_PREFIX.length).trim();
   }
 
-  const directMatch = normalized.match(AGENT_TELEGRAM_DIRECT_PATTERN);
+  const directMatch = withoutTopic.match(AGENT_TELEGRAM_DIRECT_PATTERN);
   if (directMatch) {
     return directMatch[2].trim();
   }
-  const slashMatch = normalized.match(AGENT_TELEGRAM_SLASH_PATTERN);
+  const slashMatch = withoutTopic.match(AGENT_TELEGRAM_SLASH_PATTERN);
   if (slashMatch) {
     return slashMatch[2].trim();
+  }
+
+  // Telegram group without agent prefix
+  const groupMatch = withoutTopic.match(/^telegram:group:(.+)$/i);
+  if (groupMatch) {
+    return groupMatch[1].trim();
+  }
+  const agentGroupMatch = withoutTopic.match(AGENT_TELEGRAM_GROUP_PATTERN);
+  if (agentGroupMatch) {
+    return agentGroupMatch[2].trim();
   }
 
   return "";
@@ -202,9 +254,12 @@ export function buildWrapperPayload({ command, sessionKey, idempotencyKey, runId
     throw new Error("telegram target could not be derived from sessionKey");
   }
 
+  const topicId = deriveTelegramTopicFromSessionKey(targetSessionKey);
+
   return {
     sessionKey: targetSessionKey,
     target: target || undefined,
+    topicId: topicId || undefined,
     idempotencyKey: idempotencyKey.trim(),
     runId: normalizedRunId || undefined,
     message: buildTradePrompt(normalizedCommand, normalizedRunId || undefined),

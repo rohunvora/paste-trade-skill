@@ -506,7 +506,12 @@ export function parseWrapperPayload(rawArg) {
           MAX_EXTRA_SYSTEM_PROMPT_CHARS,
         );
 
-  return { sessionKey, idempotencyKey, target, runId, laneVersion, message, extraSystemPrompt };
+  const topicId =
+    parsed.topicId === undefined || parsed.topicId === null
+      ? null
+      : String(parsed.topicId).trim() || null;
+
+  return { sessionKey, idempotencyKey, target, topicId, runId, laneVersion, message, extraSystemPrompt };
 }
 
 export function deriveMessageChannelFromSessionKey(sessionKey) {
@@ -525,28 +530,56 @@ export function deriveMessageChannelFromSessionKey(sessionKey) {
   return KNOWN_MESSAGE_CHANNELS.has(first) ? first : null;
 }
 
+const TOPIC_SUFFIX_PATTERN = /:topic:(\d+)$/i;
+
+/**
+ * Extract the Telegram topic ID from a session key, if present.
+ */
+export function deriveTelegramTopicFromSessionKey(sessionKey) {
+  const normalized = typeof sessionKey === "string" ? sessionKey.trim() : "";
+  const topicMatch = normalized.match(TOPIC_SUFFIX_PATTERN);
+  return topicMatch ? topicMatch[1] : null;
+}
+
+/**
+ * Extract the base Telegram chat ID (strips :topic:N suffix).
+ * Handles group, direct, and slash session key formats.
+ */
 export function deriveTelegramTargetFromSessionKey(sessionKey) {
   const normalized = typeof sessionKey === "string" ? sessionKey.trim() : "";
   if (!normalized) {
     return null;
   }
 
-  const directMatch = normalized.match(/^agent:[^:]+:telegram:direct:(.+)$/i);
+  // Strip :topic:N suffix to get the base chat ID
+  const withoutTopic = normalized.replace(TOPIC_SUFFIX_PATTERN, "").trim();
+
+  const directMatch = withoutTopic.match(/^agent:[^:]+:telegram:direct:(.+)$/i);
   if (directMatch && directMatch[1].trim()) {
     return directMatch[1].trim();
   }
 
-  const slashMatch = normalized.match(/^agent:[^:]+:telegram:slash:(.+)$/i);
+  const groupMatch = withoutTopic.match(/^agent:[^:]+:telegram:group:(.+)$/i);
+  if (groupMatch && groupMatch[1].trim()) {
+    return groupMatch[1].trim();
+  }
+
+  const slashMatch = withoutTopic.match(/^agent:[^:]+:telegram:slash:(.+)$/i);
   if (slashMatch && slashMatch[1].trim()) {
     return slashMatch[1].trim();
   }
 
-  const rawDirect = normalized.match(/^telegram:direct:(.+)$/i);
+  const rawDirect = withoutTopic.match(/^telegram:direct:(.+)$/i);
   if (rawDirect && rawDirect[1].trim()) {
     return rawDirect[1].trim();
   }
 
-  const rawSlash = normalized.match(/^telegram:slash:(.+)$/i);
+  const rawGroup = withoutTopic.match(/^telegram:group:(.+)$/i);
+  if (rawGroup && rawGroup[1].trim()) {
+    return rawGroup[1].trim();
+  }
+
+  const rawSlash = withoutTopic.match(/^telegram:slash:(.+)$/i);
   if (rawSlash && rawSlash[1].trim()) {
     return rawSlash[1].trim();
   }
@@ -956,8 +989,8 @@ async function waitForLiveLinkContext(runId, opts = {}) {
   return null;
 }
 
-export function buildDirectSendArgs(channel, target, message) {
-  return [
+export function buildDirectSendArgs(channel, target, message, topicId) {
+  const args = [
     "message",
     "send",
     "--json",
@@ -968,9 +1001,13 @@ export function buildDirectSendArgs(channel, target, message) {
     "--message",
     message,
   ];
+  if (topicId) {
+    args.push("--thread-id", String(topicId));
+  }
+  return args;
 }
 
-function sendDirectMessage(channel, target, message, spawnSyncImpl) {
+function sendDirectMessage(channel, target, message, spawnSyncImpl, topicId) {
   if (
     typeof channel !== "string" ||
     !channel.trim() ||
@@ -990,7 +1027,7 @@ function sendDirectMessage(channel, target, message, spawnSyncImpl) {
 
   const result = spawnSyncImpl(
     "openclaw",
-    buildDirectSendArgs(channel.trim(), target.trim(), message.trim()),
+    buildDirectSendArgs(channel.trim(), target.trim(), message.trim(), topicId || null),
     {
       stdio: "pipe",
       encoding: "utf8",
@@ -1010,11 +1047,11 @@ function sendDirectMessage(channel, target, message, spawnSyncImpl) {
   };
 }
 
-function sendWrapperNotice(payload, message, channel, target, spawnSyncImpl) {
+function sendWrapperNotice(payload, message, channel, target, spawnSyncImpl, topicId) {
   if (channel && target) {
     return {
       mode: "direct_send",
-      ...sendDirectMessage(channel, target, message, spawnSyncImpl),
+      ...sendDirectMessage(channel, target, message, spawnSyncImpl, topicId),
     };
   }
 
@@ -1071,10 +1108,15 @@ export async function runWrapper(rawArg, opts = {}) {
     typeof payload.target === "string" && payload.target.trim()
       ? payload.target.trim()
       : deriveTelegramTargetFromSessionKey(payload.sessionKey);
+  const topicId =
+    (typeof payload.topicId === "string" && payload.topicId.trim())
+      ? payload.topicId.trim()
+      : deriveTelegramTopicFromSessionKey(payload.sessionKey);
   const deliveryMeta = {
     channel: channel ?? null,
     targetHash: target ? hashForAudit(target) : auditBase.targetHash,
     targetPresent: Boolean(target),
+    topicId: topicId ?? null,
     handoffMessageLength: payload.message.length,
     handoffExtraSystemPromptLength: payload.extraSystemPrompt?.length ?? 0,
   };
@@ -1226,6 +1268,7 @@ export async function runWrapper(rawArg, opts = {}) {
                 target,
                 `Watch live: ${ctx.sourceUrl}`,
                 spawnSyncImpl,
+                topicId,
               );
               appendAuditEvent(
                 {
@@ -1282,6 +1325,7 @@ export async function runWrapper(rawArg, opts = {}) {
             target,
             `Watch live: ${recoveredCtx.sourceUrl}`,
             spawnSyncImpl,
+            topicId,
           );
           appendAuditEvent(
             {
@@ -1391,6 +1435,7 @@ export async function runWrapper(rawArg, opts = {}) {
             channel,
             target,
             spawnSyncImpl,
+            topicId,
           );
           appendAuditEvent(
             {
@@ -1455,6 +1500,7 @@ export async function runWrapper(rawArg, opts = {}) {
             channel,
             target,
             spawnSyncImpl,
+            topicId,
           );
           appendAuditEvent(
             {
