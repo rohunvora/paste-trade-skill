@@ -21,9 +21,7 @@ export function loadKey(key: string): string | undefined {
 export function getBaseUrl(): string {
   const configured = loadKey("PASTE_TRADE_URL") || loadKey("BOARD_URL") || loadKey("BELIEF_BOARD_URL");
   const { baseUrl, trusted, reason } = normalizeTrustedBaseUrl(configured);
-  if (!trusted && reason) {
-    console.error(`[paste.trade] ${reason}`);
-  }
+  if (!trusted) throw new Error(reason ?? "Invalid base URL configuration.");
   return baseUrl;
 }
 
@@ -36,11 +34,11 @@ export async function ensureKey(): Promise<string | null> {
   const existing = loadKey("PASTE_TRADE_KEY");
   if (existing) return existing;
 
-  // No key found — auto-provision
-  const baseUrl = getBaseUrl();
-  console.error(`[paste.trade] No API key found. Creating your identity...`);
-
   try {
+    // No key found — auto-provision
+    const baseUrl = getBaseUrl();
+    console.error(`[paste.trade] No API key found. Creating your identity...`);
+
     const res = await fetch(`${baseUrl}/api/keys`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

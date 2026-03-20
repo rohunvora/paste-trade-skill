@@ -22,7 +22,7 @@ import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { getRuntimeSourceDir, readEnvValue } from "./runtime-paths";
-import { parseSafeExternalUrl } from "./security";
+import { fetchWithSafeRedirects, parseSafeExternalUrl } from "./security";
 
 // ---------------------------------------------------------------------------
 // X API tokens (optional)
@@ -1203,12 +1203,11 @@ async function fetchArticleMetadata(url: string): Promise<ArticleMetadata | null
   const safeUrl = parseSafeExternalUrl(url)?.href;
   if (!safeUrl) return null;
   try {
-    const res = await fetch(safeUrl, {
+    const res = await fetchWithSafeRedirects(safeUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         Accept: "text/html,application/xhtml+xml,*/*",
       },
-      redirect: "follow",
     });
     if (!res.ok) return null;
     const body = await res.text();
@@ -1283,12 +1282,11 @@ async function extractText(url: string): Promise<string> {
   }
 
   // Fallback: raw fetch + regex strip
-  const res = await fetch(safeUrl, {
+  const res = await fetchWithSafeRedirects(safeUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       Accept: "text/html,application/xhtml+xml",
     },
-    redirect: "follow",
   });
 
   if (!res.ok) {
@@ -1362,7 +1360,7 @@ async function main() {
           const safeImgUrl = parseSafeExternalUrl(imgUrl)?.href;
           if (!safeImgUrl) continue;
           try {
-            const imgRes = await fetch(safeImgUrl);
+            const imgRes = await fetchWithSafeRedirects(safeImgUrl);
             if (imgRes.ok) {
               const ext = safeImgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
               const imgPath = join(dir, `source-${hash}-img${i}.${ext}`);
