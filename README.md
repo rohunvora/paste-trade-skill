@@ -1,21 +1,29 @@
 # paste.trade
 
-Can an AI read what someone said about markets and turn it into a tracked, auditable trade?
+Paste a source. AI finds the trade, captures the price when the author said it, tracks P&L from there.
 
-This repo is the reasoning engine. [paste.trade](https://paste.trade) is where the results live.
+Open source. [paste.trade](https://paste.trade) is where the trades live.
 
-## The experiment
+## Why this exists
 
-Someone says something about markets. A tweet, a podcast clip, an article, a hunch typed into a terminal. An AI agent reads it, extracts every tradeable thesis, researches instruments, picks the best expression for each, explains its reasoning, and locks the price.
+You can already ask Claude "what's the trade here?" and get a smart answer. Then you close the tab and it's gone.
 
-Then we wait. Live P&L tracks from that moment forward. Was the AI's interpretation right? Did it pick a better instrument than the author implied? You can check. Every trade is public, every reasoning step is visible, every price is locked.
+The pipeline in this repo is what makes it persist. It doesn't just think about the trade. It commits it to a system. Creates a source page. Saves each thesis. Posts each trade with a locked price. Pushes events to a WebSocket so you can watch it happen. Now that reasoning has a URL, a price ticking against it, and a spot on a feed next to every other trade the system has ever produced.
 
-We're running this experiment in public.
+The LLM is the brain. The chain is what gives it a body.
 
-## What happens when you paste a URL
+## Why now
+
+Agent skills are new. Six months ago there was no way to give an LLM a structured pipeline with real tool calls, file I/O, and API posts. It was a chatbot. Now it's a runtime.
+
+This pipeline is six sequential tool calls where each one depends on the last: extract the source, find what's tradeable, research instruments, compare candidates, pick the best fit, post the trade. A year ago that chain would break by step three. Now it works.
+
+Context windows matter too. A one-hour podcast is 50k tokens. That used to not fit. Now the agent reads the whole thing and finds the three tradeable moments across five speakers.
+
+## What it does
 
 ```
- tweet                          share card
+ source                         trade card
 ┌─────────────────────┐       ┌──────────────────────────────────┐
 │ @kansasangus         │       │ @kansasangus · Mar 18, 2026      │
 │                      │       │                                  │
@@ -34,22 +42,20 @@ We're running this experiment in public.
 └─────────────────────┘       └──────────────────────────────────┘
 ```
 
-Two prices locked on every trade:
-- **author price**: when the source was published
-- **posted price**: when the AI posted the trade
+Two prices on every trade:
+- **author price**: the moment the source was published
+- **posted price**: the moment the AI posted the trade
 
-No backtesting. No hypotheticals. Just: was the AI right?
-
-## The pipeline
+## How it works
 
 ```
-you paste a URL
+paste a URL or type a thesis
     │
     ▼
 read the source ── tweet, video, article, PDF, screenshot
     │
     ▼
-find tradeable ideas ── 1 to 5 theses per source
+find tradeable ideas ── 1 to 5 per source
     │
     ▼
 research each one ── web search, instrument discovery
@@ -63,34 +69,23 @@ compare candidates ── stocks, perps, prediction markets
 pick best fit, explain why, lock price
     │
     ▼
-post to paste.trade ── P&L tracked from here
+post to paste.trade ── P&L tracks from here
 ```
 
-You watch it resolve live on the source page. Each thesis appears as a card, routes independently, and resolves with an explanation and price.
+## Why it's built this way
 
-## What this is not
-
-Not a trading bot. It doesn't execute.
-Not a black box. Every reasoning step is visible.
-Not financial advice. It's an experiment.
-
-It's an AI that shows its work and gets graded.
-
-## This repo vs paste.trade
+Agent skill because that's where you already are. Scripts are CLI tools because that's what LLMs can call. Streams live because you don't trust a black box. Two prices because you want to know who was early.
 
 ```
 ┌─────────────────────────┐      ┌─────────────────────────────┐
 │  this repo               │      │  paste.trade                 │
 │                          │      │                              │
-│  the reasoning engine    │      │  the accountability layer    │
-│                          │      │                              │
 │  reads sources           │ ───> │  tracks P&L                  │
-│  extracts theses         │ ───> │  hosts source pages          │
-│  researches tickers      │ ───> │  streams progress live       │
-│  explains reasoning      │ ───> │  publishes share cards       │
-│  posts trades            │ ───> │  ranks authors by results    │
+│  extracts theses         │ ───> │  streams progress live       │
+│  researches instruments  │ ───> │  publishes share cards       │
+│  explains reasoning      │ ───> │  ranks by results            │
 │                          │      │                              │
-│  runs in YOUR agent      │      │  anyone can verify           │
+│  runs in your agent      │      │  anyone can see              │
 └─────────────────────────┘      └─────────────────────────────┘
 ```
 
@@ -99,10 +94,8 @@ It's an AI that shows its work and gets graded.
 Paste into Claude Code, Codex, or OpenClaw:
 
 ```
-https://github.com/rohunvora/paste-trade-skill
+https://github.com/rohunvora/paste-trade
 ```
-
-Then:
 
 ```
 /trade https://x.com/someone/status/123456789
@@ -118,14 +111,10 @@ venues:    Robinhood (stocks) · Hyperliquid (perps) · Polymarket (prediction m
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) runtime
-- `yt-dlp` for YouTube extraction (skill offers to install on first run)
-- See [env.example](env.example) for environment variables
+- [Bun](https://bun.sh)
+- `yt-dlp` for YouTube (skill offers to install on first run)
+- [env.example](env.example) for env vars
 
-## See it working
+## Links
 
-Live feed: [paste.trade](https://paste.trade)
-How it works: [ARCHITECTURE.md](ARCHITECTURE.md)
-Changelog: [paste.trade/#changelog](https://paste.trade/#changelog)
-
-The results are public. Go look.
+[paste.trade](https://paste.trade) · [ARCHITECTURE.md](ARCHITECTURE.md) · [paste.trade/#changelog](https://paste.trade/#changelog)
