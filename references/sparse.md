@@ -85,6 +85,8 @@ SPARSE SOURCE
 │  └─ Translate into hypothesis.
 │
 ├─ Decompose
+│  ├─ Is the subject company/asset itself publicly traded?
+│  │   If yes → always include as a `who` candidate.
 │  ├─ What pumps hardest if the hypothesis is right?
 │  ├─ What are the 2nd order effects?
 │  └─ What are the best possible trades? → `who` entries (1-3)
