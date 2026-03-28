@@ -21,6 +21,7 @@ import { $ } from "bun";
 import { mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { fetchWithRemoteUrlPolicy, validateRemoteUrl, type RemoteUrlPolicy } from "../shared/url-safety";
 import { getRuntimeSourceDir, readEnvValue } from "./runtime-paths";
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,11 @@ function loadEnvToken(key: string): string | undefined {
 }
 const X_BEARER_TOKEN = loadEnvToken("X_BEARER_TOKEN");
 const X_WEB_BEARER_TOKEN = loadEnvToken("X_WEB_BEARER_TOKEN");
+const ALLOW_PRIVATE_FETCH = loadEnvToken("PASTE_TRADE_ALLOW_PRIVATE_FETCH") === "1";
+const REMOTE_FETCH_POLICY: RemoteUrlPolicy = {
+  allowLocalhost: ALLOW_PRIVATE_FETCH,
+  allowPrivateNetwork: ALLOW_PRIVATE_FETCH,
+};
 let cachedDiscoveredXWebBearerToken: string | null | undefined;
 
 async function discoverXWebBearerToken(): Promise<string | null> {
@@ -225,35 +231,69 @@ async function extractXArticleFromTweetGraphql(tweetId: string): Promise<XArticl
 
 type UrlType = "youtube" | "tweet" | "text";
 
+function parseUrl(url: string): URL | null {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
 function classifyUrl(url: string): UrlType {
-  const u = url.toLowerCase();
+  const parsed = parseUrl(url);
+  if (!parsed) return "text";
+
+  const host = parsed.hostname.toLowerCase();
+  const path = parsed.pathname.toLowerCase();
   if (
-    u.includes("youtube.com/watch") ||
-    u.includes("youtu.be/") ||
-    u.includes("youtube.com/live")
-  )
+    ((host === "youtube.com" || host.endsWith(".youtube.com")) &&
+      (path === "/watch" || path.startsWith("/live"))) ||
+    host === "youtu.be"
+  ) {
     return "youtube";
+  }
   if (
-    u.includes("x.com/") && u.includes("/status/") ||
-    u.includes("twitter.com/") && u.includes("/status/")
-  )
+    (host === "x.com" || host.endsWith(".x.com") || host === "twitter.com" || host.endsWith(".twitter.com")) &&
+    /\/status\/\d+/i.test(path)
+  ) {
     return "tweet";
+  }
   return "text";
 }
 
 /** Extract tweet ID and handle from an x.com or twitter.com URL */
 function parseTweetUrl(url: string): { handle: string; tweetId: string } | null {
-  const m = url.match(/(?:x|twitter)\.com\/(\w+)\/status\/(\d+)/);
-  if (!m) return null;
-  return { handle: m[1], tweetId: m[2] };
+  const parsed = parseUrl(url);
+  if (!parsed) return null;
+  const host = parsed.hostname.toLowerCase();
+  if (!(host === "x.com" || host.endsWith(".x.com") || host === "twitter.com" || host.endsWith(".twitter.com"))) {
+    return null;
+  }
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if (parts.length < 3 || parts[1] !== "status") return null;
+  const tweetId = parts[2];
+  const handle = parts[0];
+  if (!tweetId || !handle) return null;
+  if (!/^\d+$/.test(tweetId)) return null;
+  return { handle, tweetId };
 }
 
 function extractVideoId(url: string): string | null {
-  const m =
-    url.match(/[?&]v=([^&]+)/) ||
-    url.match(/youtu\.be\/([^?&]+)/) ||
-    url.match(/youtube\.com\/live\/([^?&]+)/);
-  return m?.[1] ?? null;
+  const parsed = parseUrl(url);
+  if (!parsed) return null;
+  const host = parsed.hostname.toLowerCase();
+  if (host === "youtu.be") {
+    return parsed.pathname.split("/").filter(Boolean)[0] ?? null;
+  }
+  if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+    if (parsed.pathname === "/watch") {
+      return parsed.searchParams.get("v");
+    }
+    if (parsed.pathname.startsWith("/live/")) {
+      return parsed.pathname.split("/").filter(Boolean)[1] ?? null;
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -910,8 +950,9 @@ function extractImagesFromMarkdown(md: string): ExtractedImage[] {
   let match;
 
   while ((match = mdImgRegex.exec(md)) !== null) {
-    const alt = match[1];
+    const alt = match[1] ?? "";
     const url = match[2];
+    if (!url) continue;
     const lower = url.toLowerCase();
     if (lower.includes("tracking") || lower.includes("pixel") ||
         lower.includes("spacer") || lower.includes("favicon") ||
@@ -1190,19 +1231,21 @@ function extractArticleMetadataFromHtml(
 
 async function fetchArticleMetadata(url: string): Promise<ArticleMetadata | null> {
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithRemoteUrlPolicy(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         Accept: "text/html,application/xhtml+xml,*/*",
       },
-      redirect: "follow",
+    }, {
+      policy: REMOTE_FETCH_POLICY,
+      maxRedirects: 5,
     });
     if (!res.ok) return null;
     const body = await res.text();
     if (!body || body.length < 50) return null;
     const looksLikeHtml = /<html|<meta|<title|<script/i.test(body);
     if (!looksLikeHtml) return null;
-    return extractArticleMetadataFromHtml(body, url);
+    return extractArticleMetadataFromHtml(body, res.url || url);
   } catch {
     return null;
   }
@@ -1266,12 +1309,14 @@ async function extractText(url: string): Promise<string> {
   }
 
   // Fallback: raw fetch + regex strip
-  const res = await fetch(url, {
+  const res = await fetchWithRemoteUrlPolicy(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
       Accept: "text/html,application/xhtml+xml",
     },
-    redirect: "follow",
+  }, {
+    policy: REMOTE_FETCH_POLICY,
+    maxRedirects: 5,
   });
 
   if (!res.ok) {
@@ -1279,10 +1324,11 @@ async function extractText(url: string): Promise<string> {
   }
 
   const html = await res.text();
+  const finalUrl = res.url || url;
 
   // Extract images before stripping HTML
-  const images = extractImagesFromHtml(html, url);
-  const htmlMetadata = extractArticleMetadataFromHtml(html, url, undefined, images);
+  const images = extractImagesFromHtml(html, finalUrl);
+  const htmlMetadata = extractArticleMetadataFromHtml(html, finalUrl, undefined, images);
 
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -1293,7 +1339,7 @@ async function extractText(url: string): Promise<string> {
     .replace(/\s+/g, " ")
     .trim();
 
-  const payload = buildArticlePayload("text", url, text, images, htmlMetadata);
+  const payload = buildArticlePayload("text", finalUrl, text, images, htmlMetadata);
   const parsed = JSON.parse(payload) as { word_count?: number };
   console.error(`  raw fetch: ${parsed.word_count ?? 0} words, ${images.length} images extracted`);
   return payload;
@@ -1313,6 +1359,13 @@ async function main() {
   }
 
   const type = classifyUrl(url);
+  if (type === "text") {
+    const validated = validateRemoteUrl(url, REMOTE_FETCH_POLICY);
+    if (!validated.ok) {
+      console.log(JSON.stringify({ source: "text", url, error: validated.reason }));
+      return;
+    }
+  }
   const { streamLog } = await import("./stream-log");
   streamLog(`Extracting ${type} content from: ${url}`);
 
@@ -1343,7 +1396,10 @@ async function main() {
           const imgUrl = typeof img === "string" ? img : img?.url;
           if (!imgUrl) continue;
           try {
-            const imgRes = await fetch(imgUrl);
+            const imgRes = await fetchWithRemoteUrlPolicy(imgUrl, {}, {
+              policy: REMOTE_FETCH_POLICY,
+              maxRedirects: 5,
+            });
             if (imgRes.ok) {
               const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
               const imgPath = join(dir, `source-${hash}-img${i}.${ext}`);

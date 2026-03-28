@@ -8,7 +8,7 @@
  */
 
 import { loadKey, getBaseUrl } from "./ensure-key";
-import { execSync } from "child_process";
+import { openUrlInBrowser } from "./browser";
 
 export async function signIn(): Promise<string> {
   const apiKey = loadKey("PASTE_TRADE_KEY");
@@ -34,17 +34,7 @@ export async function signIn(): Promise<string> {
   const result = await res.json() as { url: string; expires_in: number };
 
   // Open in browser
-  try {
-    if (process.platform === "darwin") {
-      execSync(`open "${result.url}"`);
-    } else if (process.platform === "linux") {
-      execSync(`xdg-open "${result.url}"`);
-    } else {
-      execSync(`start "${result.url}"`);
-    }
-  } catch {
-    // If open fails, the user can manually visit the URL
-  }
+  openUrlInBrowser(result.url);
 
   return [
     `Opening paste.trade... you'll be signed in momentarily.`,

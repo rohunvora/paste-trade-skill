@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import os from "os";
-import { dirname, join, resolve } from "path";
+import { dirname, isAbsolute, join, relative, resolve } from "path";
 
 const SCRIPTS_DIR = import.meta.dir;
 export const SKILL_ROOT = resolve(SCRIPTS_DIR, "..");
@@ -69,6 +69,20 @@ export function getRuntimeExtractionDir(): string {
 
 export function getRuntimeSourceDir(): string {
   return join(getRuntimeDataDir(), "sources");
+}
+
+export function ensurePathInsideDir(filePath: string, dirPath: string): string {
+  const resolvedDir = resolve(dirPath);
+  const resolvedFile = resolve(filePath);
+  const rel = relative(resolvedDir, resolvedFile);
+  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
+    return resolvedFile;
+  }
+  throw new Error(`Path must stay within ${resolvedDir}`);
+}
+
+export function resolveRuntimeSourceFile(filePath: string): string {
+  return ensurePathInsideDir(filePath, getRuntimeSourceDir());
 }
 
 export function getUserStateDir(): string {

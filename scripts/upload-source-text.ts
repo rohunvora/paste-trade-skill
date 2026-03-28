@@ -8,6 +8,7 @@
 
 import { readFileSync } from "fs";
 import { getAuthedBase, logHttp, readJsonInput, readResponseOrExit } from "./common";
+import { resolveRuntimeSourceFile } from "./runtime-paths";
 
 const args = process.argv.slice(2);
 const sourceId = (args[0] ?? "").trim();
@@ -27,7 +28,7 @@ if (fileIdx !== -1) {
     console.error("[upload-source-text] --file requires a path");
     process.exit(1);
   }
-  const rawText = readFileSync(filePath, "utf8");
+  const rawText = readFileSync(resolveRuntimeSourceFile(filePath), "utf8");
   payload = {
     raw_text: rawText,
     provider: provider || "transcript_file",

@@ -18,6 +18,7 @@
 import { readFileSync } from "fs";
 import { applyRunId, extractRunIdArg } from "./run-id";
 import { getStreamContext, pushEvent } from "./stream-context";
+import { resolveRuntimeSourceFile } from "./runtime-paths";
 
 // ── Args ──────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 // ── Source loading ────────────────────────────────────────────────
 
 function loadSourceText(filePath: string): string {
-  const raw = readFileSync(filePath, "utf8");
+  const raw = readFileSync(resolveRuntimeSourceFile(filePath), "utf8");
   // Source files are JSON with a "transcript" or "text" field
   try {
     const parsed = JSON.parse(raw);
