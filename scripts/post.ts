@@ -506,7 +506,9 @@ if (typeof body.author_handle === "string" && body.author_handle.trim() && !body
 }
 
 const { streamLog } = await import("./stream-log");
-streamLog(`Posting trade: ${(body as any).ticker} ${(body as any).direction}`);
+const tradeMode = (body as any).mode === "real" ? "REAL" : "paper";
+const executionNote = (body as any).execution_details ? ` [${tradeMode} @ $${(body as any).execution_details.fill_price}]` : "";
+streamLog(`Posting trade: ${(body as any).ticker} ${(body as any).direction}${executionNote}`);
 
 const headers: Record<string, string> = { "Content-Type": "application/json" };
 headers["Authorization"] = `Bearer ${apiKey}`;
