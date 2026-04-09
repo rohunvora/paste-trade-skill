@@ -63,7 +63,7 @@ If the input contains a paste.trade/s/ URL plus a thesis or trade idea: load `re
 - Keep chat updates operational and brief.
 - First status line should set expectation: `Running /trade now. I will send a live link shortly.`
 - For transcript sources, next status line should set duration expectation: `On it. Pulling transcript now. Longer videos can take a few minutes.`
-- After `create-source.ts`, send `Watch live: {source_url}` immediately unless your runtime already delivers it.
+- After `create-source.ts`, always send `Watch live: {source_url}` explicitly in chat. Never assume your runtime delivers it automatically.
 - Continue the pipeline after the live link. Never treat the live link as the end of the `/trade` run.
 - Do not wait for user input before continuing.
 - If your runtime surfaces progress in chat, send updates when the state changes. Do not hold them and dump them at the end.
@@ -125,7 +125,7 @@ bun run skill/scripts/create-source.ts '{ "url": "...", "title": "...", "platfor
 1. Run `extract.ts`.
 2. **If `image_files` are present in the output, read them now.** Charts, screenshots, and diagrams are critical source context — use them to inform thesis extraction, ticker identification, and derivation reasoning. Describe what you see.
 3. If YouTube with multiple speakers with competing or independent market views (panels, debates, co-hosted roundtables — not single-guest interviews) and `GEMINI_API_KEY` is missing: ask the user now — before creating the source. Offer to paste a key or continue without speaker attribution.
-4. Run `create-source.ts`. **Send the Watch live link immediately unless your runtime handles delivery, then continue the pipeline in the same run. Do not stop or wait for user input.** (See §2 Chat UX.)
+4. Run `create-source.ts`. **Always send the Watch live link explicitly in chat, then continue the pipeline in the same run. Do not stop or wait for user input.** (See §2 Chat UX.)
 5. Do NOT read the `saved_to` file before this point.
 6. Only after source creation, run enrichment, transcript reads, and uploads.
 
@@ -539,7 +539,7 @@ When 3+ trades come from one source, open with 1-2 sentences framing the portfol
 
 If both direct and derived trades exist, show direct first.
 
-Do not include trade card URLs (paste.trade/t/...) in the reply — they are already linked from the live board. Only include the live board URL (paste.trade/s/...) if it hasn't been shared yet.
+Do not include trade card URLs (paste.trade/t/...) in the reply — they are already linked from the live board. Always include the live board URL (paste.trade/s/...) in the final trade summary, even if it was shared earlier. This ensures the link is never lost if earlier status messages fail to deliver.
 
 If posting fails: `Board unavailable. Skipping post.`
 
